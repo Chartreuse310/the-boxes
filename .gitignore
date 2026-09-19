@@ -30,6 +30,11 @@ Thumbs.db
 # 测试/覆盖率
 coverage/
 
+# AI 协作工作区
+# 内含工作记录与本地绝对路径（如 /Users/z/the-boxes-data），本仓库公开，不入库。
+# 若日后要版本化这里的项目级 skill，单独放行：!.workbuddy/skills/
+.workbuddy/
+
 # 临时
 *.tmp
 *.temp
