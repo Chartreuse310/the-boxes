@@ -3,13 +3,15 @@ import react from '@vitejs/plugin-react'
 import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
-  ensureIds,
+  ensureIdsInFile,
   migrateTodo,
-  reorder,
-  setState,
+  reorderInFile,
+  setTodoStateInFile,
+  taskPath,
   touchDay,
   type TodoState,
 } from './server/store'
+import { parseTask } from './src/lib/parser'
 
 /** 某日文件是否存在 */
 async function dayExistsFor(dataDir: string, date: string): Promise<boolean> {
@@ -104,7 +106,14 @@ function boxesApi(dataDir: string): Plugin {
           }
         }
 
-        const pathname = (req.url ?? '/').split('?')[0]
+        // 任务名可含中文等非 ASCII 字符，浏览器 fetch 会 percent-encode，
+        // 匹配路由前统一解码（解码失败则保留原文，交给 taskPath 校验拒绝）
+        let pathname = (req.url ?? '/').split('?')[0]
+        try {
+          pathname = decodeURIComponent(pathname)
+        } catch {
+          /* 非法百分号序列：保留原文 */
+        }
 
         // GET /api/info : 数据目录与版本。界面 footer 显示它们，值必须来自这里（不许硬编码）
         if (req.method === 'GET' && /^\/info\/?$/.test(pathname)) {
@@ -139,10 +148,10 @@ function boxesApi(dataDir: string): Plugin {
         const mt = pathname.match(/^\/days\/(\d{4}-\d{2}-\d{2})\/ensure-ids$/)
         if (req.method === 'PUT' && mt) {
           handle(async () => {
+            const file = path.join(dataDir, 'inbox', `${mt[1]}.md`)
             if (!(await dayExistsFor(dataDir, mt[1]))) await touchDay(dataDir, mt[1])
-            await ensureIds(dataDir, mt[1])
-            const content = await readFile(path.join(dataDir, 'inbox', `${mt[1]}.md`), 'utf8')
-            return { content }
+            await ensureIdsInFile(file)
+            return { content: await readFile(file, 'utf8') }
           })
           return
         }
@@ -155,7 +164,7 @@ function boxesApi(dataDir: string): Plugin {
             const state = String(body.state ?? '')
             const allowed = ['todo', 'doing', 'done']
             if (!allowed.includes(state)) throw new Error(`非法状态：${state}`)
-            await setState(dataDir, ms[1], ms[2], state as TodoState)
+            await setTodoStateInFile(path.join(dataDir, 'inbox', `${ms[1]}.md`), ms[2], state as TodoState)
             return { ok: true }
           })
           return
@@ -182,7 +191,87 @@ function boxesApi(dataDir: string): Plugin {
           handle(async () => {
             const body = await readBody()
             const order = (body.order as string[]) ?? []
-            await reorder(dataDir, mr[1], order)
+            await reorderInFile(path.join(dataDir, 'inbox', `${mr[1]}.md`), order)
+            return { ok: true }
+          })
+          return
+        }
+
+        // —— 任务（tasks/ 目录，SPEC §5）——
+        // GET /api/tasks : 任务列表（卡片用：名称 + 一句话简介 + 进度）
+        if (req.method === 'GET' && /^\/tasks\/?$/.test(pathname)) {
+          handle(async () => {
+            let files: string[]
+            try {
+              files = await readdir(path.join(dataDir, 'tasks'))
+            } catch {
+              return [] // tasks/ 不存在 = 暂无任务
+            }
+            const tasks = await Promise.all(
+              files
+                .filter((f) => f.endsWith('.md'))
+                .map(async (f) => {
+                  const slug = f.replace(/\.md$/, '')
+                  const meta = parseTask(await readFile(path.join(dataDir, 'tasks', f), 'utf8'))
+                  return {
+                    slug,
+                    title: meta.title ?? slug,
+                    goal: meta.goal,
+                    status: meta.status,
+                    created: meta.created,
+                    total: meta.todos.length,
+                    done: meta.todos.filter((t) => t.state === 'done').length,
+                  }
+                }),
+            )
+            // 提出日期新的在前；缺日期的按文件名排最后
+            tasks.sort((a, b) => (b.created ?? '').localeCompare(a.created ?? '') || a.slug.localeCompare(b.slug))
+            return tasks
+          })
+          return
+        }
+
+        // GET /api/tasks/:slug : 任务文件原文
+        const tg = pathname.match(/^\/tasks\/([^/]+)$/)
+        if (req.method === 'GET' && tg) {
+          readFile(taskPath(dataDir, tg[1]), 'utf8')
+            .then((content) => send(200, { slug: tg[1], content }))
+            .catch(() => send(404, { error: 'not found' }))
+          return
+        }
+
+        // PUT /api/tasks/:slug/ensure-ids : 给缺失 id 的 todo 补 `^xxxx`
+        const te = pathname.match(/^\/tasks\/([^/]+)\/ensure-ids$/)
+        if (req.method === 'PUT' && te) {
+          handle(async () => {
+            const file = taskPath(dataDir, te[1])
+            await ensureIdsInFile(file)
+            return { content: await readFile(file, 'utf8') }
+          })
+          return
+        }
+
+        // PUT /api/tasks/:slug/todos/:id/state : 修改任务内某 todo 状态（三态）
+        const ts = pathname.match(/^\/tasks\/([^/]+)\/todos\/([a-z0-9]+)\/state$/)
+        if (req.method === 'PUT' && ts) {
+          handle(async () => {
+            const body = await readBody()
+            const state = String(body.state ?? '')
+            const allowed = ['todo', 'doing', 'done']
+            if (!allowed.includes(state)) throw new Error(`非法状态：${state}`)
+            await setTodoStateInFile(taskPath(dataDir, ts[1]), ts[2], state as TodoState)
+            return { ok: true }
+          })
+          return
+        }
+
+        // PUT /api/tasks/:slug/reorder : 按给定 id 顺序重排任务内 todo
+        const tr = pathname.match(/^\/tasks\/([^/]+)\/reorder$/)
+        if (req.method === 'PUT' && tr) {
+          handle(async () => {
+            const body = await readBody()
+            const order = (body.order as string[]) ?? []
+            await reorderInFile(taskPath(dataDir, tr[1]), order)
             return { ok: true }
           })
           return

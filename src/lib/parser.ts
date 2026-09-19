@@ -54,3 +54,29 @@ export function parseInbox(markdown: string): Todo[] {
   }
   return todos
 }
+
+/** 任务文件的元数据（SPEC §5）。slug 由文件名决定，不存文件里。 */
+export interface TaskMeta {
+  title: string | null // `# 任务：装修` → 装修
+  goal: string | null // `**目标**：…` 一句话简介
+  status: string | null // 进行中 | 已完成 | 搁置
+  created: string | null // `**提出**：YYYY-MM-DD`
+}
+
+/** 解析任务文件：抽元数据 + todos（todo 行与 inbox 同一套行格式，
+ *  直接复用 parseInbox；`# 标题`、`**键**：值` 等行按 §7 忽略）。 */
+export function parseTask(markdown: string): TaskMeta & { todos: Todo[] } {
+  // `**键**：值` —— 键只可能是固定几个中文词，值取到行尾
+  const pick = (key: string): string | null => {
+    const m = markdown.match(new RegExp(`\\*\\*${key}\\*\\*[：:]\\s*(.+)`))
+    return m ? m[1].trim() : null
+  }
+  const heading = markdown.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? null
+  return {
+    title: heading?.replace(/^任务[：:]\s*/, '') ?? null,
+    goal: pick('目标'),
+    status: pick('状态'),
+    created: pick('提出'),
+    todos: parseInbox(markdown),
+  }
+}

@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, type BoxesInfo } from './api'
-import { parseInbox, type Todo, type TodoState } from './lib/parser'
+import { api, type BoxesInfo, type TaskSummary } from './api'
+import { parseInbox, parseTask, type TaskMeta, type Todo, type TodoState } from './lib/parser'
+
+/** 主视图：正在看哪一天的 inbox，或哪个任务 */
+type View = { kind: 'day'; date: string } | { kind: 'task'; slug: string }
 
 /** 本地时区的今日日期（YYYY-MM-DD） */
 function today(): string {
@@ -9,12 +12,17 @@ function today(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
-/** 某日 +n 天（YYYY-MM-DD，本地时区）：生成侧栏"接下来"的日期用 */
-function addDays(date: string, n: number): string {
-  const d = new Date(date + 'T00:00:00')
-  d.setDate(d.getDate() + n)
+/** ISO 日期 → 'YYYY-MM'（mini 日历的浏览位置） */
+function monthOf(iso: string): string {
+  return iso.slice(0, 7)
+}
+
+/** 月份 +n 个月（'YYYY-MM'，本地时区） */
+function addMonth(month: string, n: number): string {
+  const d = new Date(`${month}-01T00:00:00`)
+  d.setMonth(d.getMonth() + n)
   const p = (v: number) => String(v).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}`
 }
 
 /** 状态 → 中文名。只用于无障碍标签：§6 禁止把内部枚举名（done/scheduled）念给用户。 */
@@ -136,20 +144,136 @@ function shortDir(dir: string, home: string): string {
   return home && dir.startsWith(home) ? `~${dir.slice(home.length)}` : dir
 }
 
+/**
+ * mini 日历（左上角）。
+ * - 点击某天 → 查看该日 todo（含尚无文件的日子）
+ * - 把 todo 拖到某天上 → 迁移到该日文件（SPEC v2.0 整行移动），格子高亮为落点
+ * - 有记录的日子标圆点；今天描圈；点月份标题回到本月
+ * 周一开头：周标题「一 二 三 四 五 六 日」，首行前置 (getDay()+6)%7 个空位。
+ */
+function MiniCalendar(props: {
+  marked: Set<string>
+  selected: string | null
+  todayIso: string
+  onPick: (date: string) => void
+  onDropDate: (date: string) => void
+}) {
+  const { marked, selected, todayIso, onPick, onDropDate } = props
+  // 正在浏览的月份（可与今天所在月不同）
+  const [cursor, setCursor] = useState(() => monthOf(todayIso))
+  // 拖动悬停的日期（drop 落点高亮）
+  const [over, setOver] = useState<string | null>(null)
+
+  // 拖拽在任何地方结束（含取消：拖回列表松手）都要清落点高亮。
+  // dragend 冒泡到 document；drop 已在格子自己的 onDrop 里清过，这里兜底。
+  useEffect(() => {
+    const clear = () => setOver(null)
+    document.addEventListener('dragend', clear)
+    document.addEventListener('drop', clear)
+    return () => {
+      document.removeEventListener('dragend', clear)
+      document.removeEventListener('drop', clear)
+    }
+  }, [])
+
+  const lead = (new Date(`${cursor}-01T00:00:00`).getDay() + 6) % 7 // 周一开头的前置空位
+  const daysInMonth = new Date(Number(cursor.slice(0, 4)), Number(cursor.slice(5, 7)), 0).getDate()
+  const cells: (string | null)[] = [
+    ...Array.from({ length: lead }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, i) => `${cursor}-${String(i + 1).padStart(2, '0')}`),
+    ...Array.from({ length: (7 - ((lead + daysInMonth) % 7)) % 7 }, () => null), // 尾部补齐整周
+  ]
+
+  return (
+    <div className="calendar" aria-label="日期日历">
+      <div className="cal-head">
+        <button type="button" className="cal-nav" onClick={() => setCursor(addMonth(cursor, -1))} aria-label="上个月">
+          ‹
+        </button>
+        {/* 点月份标题 = 回到本月（比"今天"按钮省一个词） */}
+        <button type="button" className="cal-title" onClick={() => setCursor(monthOf(todayIso))}>
+          {Number(cursor.slice(5))}月 {cursor.slice(0, 4)}
+        </button>
+        <button type="button" className="cal-nav" onClick={() => setCursor(addMonth(cursor, 1))} aria-label="下个月">
+          ›
+        </button>
+      </div>
+      <div className="cal-grid" role="grid">
+        {['一', '二', '三', '四', '五', '六', '日'].map((w) => (
+          <span key={w} className="cal-weekday" aria-hidden>
+            {w}
+          </span>
+        ))}
+        {cells.map((d, i) =>
+          d === null ? (
+            <span key={`blank-${i}`} className="cal-cell" aria-hidden />
+          ) : (
+            <button
+              key={d}
+              type="button"
+              className={
+                'cal-cell cal-day' +
+                (d === todayIso ? ' is-today' : '') +
+                (d === selected ? ' is-selected' : '') +
+                (over === d ? ' is-drag-over' : '')
+              }
+              aria-label={`查看 ${d}`}
+              aria-current={d === selected ? 'true' : undefined}
+              onClick={() => onPick(d)}
+              onDragOver={(e) => {
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+              }}
+              onDragEnter={() => setOver(d)}
+              onDragLeave={(e) => {
+                // 子元素间穿行会冒泡 dragleave，只有真正离开该格才取消高亮
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(null)
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                setOver(null)
+                onDropDate(d)
+              }}
+            >
+              <span className="cal-num">{Number(d.slice(8))}</span>
+              {marked.has(d) && <i className="cal-dot" aria-hidden />}
+            </button>
+          ),
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const [days, setDays] = useState<string[]>([])
-  const [selected, setSelected] = useState<string | null>(null)
+  const [tasks, setTasks] = useState<TaskSummary[]>([])
+  // 当前视图：某日的 inbox 或某个任务
+  const [view, setView] = useState<View | null>(null)
   const [todos, setTodos] = useState<Todo[] | null>(null)
-  // 拖动中的 todo：列表内 drop → 重排；侧栏日期上 drop → 迁移
+  // 任务视图的元数据（day 视图为 null）
+  const [taskMeta, setTaskMeta] = useState<TaskMeta | null>(null)
+  // 拖动中的 todo：列表内 drop → 重排；日历日期上 drop → 迁移
   const drag = useRef<{ index: number; id: string } | null>(null)
-  // 拖动悬停在哪个侧栏日期上（高亮反馈）
-  const [dragOverDay, setDragOverDay] = useState<string | null>(null)
   // 运行环境信息（数据目录 / 版本）：只用于 footer。取不到就不显示那一段，不阻塞界面。
   const [info, setInfo] = useState<BoxesInfo | null>(null)
 
-  const reload = async (date: string) => {
+  const loadDay = async (date: string) => {
     const day = await api.getDay(date)
+    setTaskMeta(null)
     setTodos(day ? parseInbox(day.content) : [])
+  }
+
+  const loadTask = async (slug: string) => {
+    const raw = await api.getTask(slug)
+    if (!raw) {
+      setTaskMeta(null)
+      setTodos([])
+      return
+    }
+    const parsed = parseTask(raw.content)
+    setTaskMeta(parsed)
+    setTodos(parsed.todos)
   }
 
   // 环境信息：与日期列表无关，只需一次
@@ -157,28 +281,31 @@ export default function App() {
     api.info().then(setInfo).catch(() => setInfo(null))
   }, [])
 
-  // 启动：拉取有记录的日期，默认选中今日（无则选最近一天）
+  // 启动：拉日期与任务列表，默认查看今日（无记录则最近一天）
   useEffect(() => {
     api.listDays().then((ds) => {
       setDays(ds)
       const t = today()
-      setSelected(ds.includes(t) ? t : (ds[0] ?? null))
+      setView({ kind: 'day', date: ds.includes(t) ? t : (ds[0] ?? t) })
     })
+    api.listTasks().then(setTasks).catch(() => setTasks([]))
   }, [])
 
-  // 切换日期：读取文件并按 SPEC §4 解析
+  // 切换视图：读取文件并按 SPEC §4/§5 解析
   useEffect(() => {
-    if (selected === null) {
+    if (view === null) {
       setTodos([])
+      setTaskMeta(null)
       return
     }
     setTodos(null)
-    reload(selected)
-  }, [selected])
+    if (view.kind === 'day') loadDay(view.date)
+    else loadTask(view.slug)
+  }, [view])
 
   // 点击 box：三态前进（todo→doing→done，done 停住）
   const cycleState = async (todo: Todo, index: number) => {
-    if (selected === null || !todo.id) return
+    if (view === null || !todo.id) return
     const next = nextState(todo.state)
     if (!next) return // 已到 done 终态 → 不响应点击
     setTodos((prev) => {
@@ -187,34 +314,39 @@ export default function App() {
       copy[index] = { ...todo, state: next }
       return copy
     })
-    await api.setState(selected, todo.id, next)
-    reload(selected)
+    if (view.kind === 'day') await api.setState(view.date, todo.id, next)
+    else await api.taskSetState(view.slug, todo.id, next)
+    // 任务视图顺手刷新卡片上的进度数字
+    if (view.kind === 'task') api.listTasks().then(setTasks).catch(() => {})
+    if (view.kind === 'day') loadDay(view.date)
+    else loadTask(view.slug)
   }
 
   // 拖拽迁移（SPEC v2.0 物理移动）：todo 行原样移动到目标日文件。
-  // 目标文件可能是新建的，需刷新日期列表。
+  // 只对 day 视图开放——任务内的 todo 拖到日期属跨容器移动，语义待 M2 定义。
   const migrateTo = async (target: string) => {
     const dragged = drag.current
     drag.current = null
-    if (selected === null || !dragged || target === selected) return
-    await api.migrate(selected, dragged.id, target)
+    if (!dragged || view?.kind !== 'day' || target === view.date) return
+    await api.migrate(view.date, dragged.id, target)
     api.listDays().then(setDays)
-    reload(selected)
+    loadDay(view.date)
   }
 
-  // 拖动重排：drop 时按新 id 顺序提交。
+  // 拖动重排：drop 时按新 id 顺序提交（day 与 task 共用同一套渲染，接口分叉）。
   // 新顺序从当前 todos 直接算，不经 setTodos 的 updater 收集——
   // React 18 批处理下 updater 是 re-render 时才执行的，同步代码读不到它赋的值。
   const onDrop = async (targetIndex: number) => {
     const from = drag.current
     drag.current = null
-    if (!from || from.index === targetIndex || selected === null || !todos) return
+    if (!from || from.index === targetIndex || view === null || !todos) return
     const copy = [...todos]
     const [moved] = copy.splice(from.index, 1)
     copy.splice(targetIndex, 0, moved)
     setTodos(copy)
     const newOrder = copy.map((t) => t.id).filter(Boolean) as string[]
-    await api.reorder(selected, newOrder)
+    if (view.kind === 'day') await api.reorder(view.date, newOrder)
+    else await api.taskReorder(view.slug, newOrder)
   }
 
   const doneCount = todos?.filter((t) => t.state === 'done').length ?? 0
@@ -235,20 +367,12 @@ export default function App() {
 
   // 空态要指出 todo 的来源文件。用 /api/info 给的实际数据目录，而不是默认路径——
   // 原实现写死 ~/the-boxes，配过 .env 的用户会看到一条指向不存在文件的指引。
-  const inboxFile = info
-    ? `${shortDir(info.dataDir, info.home)}/inbox/${selected}.md`
-    : `inbox/${selected}.md`
+  const inboxFile =
+    info && view?.kind === 'day'
+      ? `${shortDir(info.dataDir, info.home)}/inbox/${view.date}.md`
+      : `inbox/${view?.kind === 'day' ? view.date : '日期'}.md`
 
-  // 侧栏日期分两组：「接下来」= 今天起 7 天（未来日期即使文件不存在也显示，
-  // 拖放即迁移、目标文件自动创建）；「更早」= 已有文件中不在前者的日期（倒序）。
   const todayStr = today()
-  const upcoming = Array.from({ length: 7 }, (_, i) => addDays(todayStr, i))
-  const upcomingSet = new Set(upcoming)
-  const earlier = days.filter((d) => !upcomingSet.has(d))
-  const sections = [
-    { heading: '接下来', dates: upcoming },
-    ...(earlier.length > 0 ? [{ heading: '更早', dates: earlier }] : []),
-  ]
 
   return (
     <div className="app">
@@ -264,46 +388,56 @@ export default function App() {
       </header>
 
       <div className="layout">
-        <aside className="sidebar" aria-label="日期列表">
-          {sections.map((sec) => (
-            <div className="sidebar-section" key={sec.heading}>
-              <div className="sidebar-heading">{sec.heading}</div>
-              {sec.dates.map((d) => (
+        <aside className="sidebar">
+          <MiniCalendar
+            marked={new Set(days)}
+            selected={view?.kind === 'day' ? view.date : null}
+            todayIso={todayStr}
+            onPick={(date) => setView({ kind: 'day', date })}
+            onDropDate={migrateTo}
+          />
+
+          {/* 任务卡片：名称 + 一句话简介（**目标**），点击查看任务 */}
+          {tasks.length > 0 && (
+            <nav className="task-list" aria-label="任务列表">
+              <div className="sidebar-heading">任务</div>
+              {tasks.map((t) => (
                 <button
-                  key={d}
+                  key={t.slug}
                   type="button"
                   className={
-                    'day-item' +
-                    (selected === d ? ' is-selected' : '') +
-                    (dragOverDay === d ? ' is-drag-over' : '')
+                    'task-card' +
+                    (view?.kind === 'task' && view.slug === t.slug ? ' is-selected' : '')
                   }
-                  aria-current={selected === d ? 'true' : undefined}
-                  onClick={() => setSelected(d)}
-                  onDragOver={(e) => {
-                    e.preventDefault()
-                    e.dataTransfer.dropEffect = 'move'
-                  }}
-                  onDragEnter={() => setDragOverDay(d)}
-                  onDragLeave={(e) => {
-                    // 子元素间穿行会冒泡 dragleave，只有真正离开该项才取消高亮
-                    if (!e.currentTarget.contains(e.relatedTarget as Node | null))
-                      setDragOverDay(null)
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault()
-                    setDragOverDay(null)
-                    migrateTo(d)
-                  }}
+                  aria-current={view?.kind === 'task' && view.slug === t.slug ? 'true' : undefined}
+                  onClick={() => setView({ kind: 'task', slug: t.slug })}
                 >
-                  <span className="day-label">{fmtDate(d)}</span>
-                  {d === todayStr && <span className="day-today">今日</span>}
+                  <span className="task-name">{t.title}</span>
+                  {t.goal && <span className="task-goal">{t.goal}</span>}
+                  <span className="task-progress" aria-label={`${t.done}/${t.total} 完成`}>
+                    {t.done}/{t.total}
+                  </span>
                 </button>
               ))}
-            </div>
-          ))}
+            </nav>
+          )}
         </aside>
 
         <main>
+        {/* 任务详情头：名称 + 目标 + 状态行 */}
+        {view?.kind === 'task' && taskMeta && (
+          <div className="task-header">
+            <h2 className="task-title">{taskMeta.title ?? view.slug}</h2>
+            {taskMeta.goal && <p className="task-goal-line">{taskMeta.goal}</p>}
+            {(taskMeta.status || taskMeta.created) && (
+              <p className="task-meta-line">
+                {taskMeta.status}
+                {taskMeta.status && taskMeta.created && ' · '}
+                {taskMeta.created && `提出于 ${fmtDate(taskMeta.created)}`}
+              </p>
+            )}
+          </div>
+        )}
         {todos && todos.length > 0 && (
           <div className="day-status" role="progressbar" aria-valuenow={donePct} aria-label={`${doneCount}/${totalCount} 完成`}>
             <span className="day-status-label">
@@ -317,11 +451,19 @@ export default function App() {
         {todos === null ? (
           <p className="muted">加载中…</p>
         ) : todos.length === 0 ? (
-          <p className="muted empty">
-            这一天还没有 todo。
-            <br />
-            在 <code>{inboxFile}</code> 里加一行，保存后刷新即可看到。
-          </p>
+          view?.kind === 'task' ? (
+            <p className="muted empty">
+              任务里还没有 todo。
+              <br />
+              在 <code>tasks/{view.slug}.md</code> 的「## todos」下加一行，保存后刷新即可看到。
+            </p>
+          ) : (
+            <p className="muted empty">
+              这一天还没有 todo。
+              <br />
+              在 <code>{inboxFile}</code> 里加一行，保存后刷新即可看到。
+            </p>
+          )
         ) : (
           <ul className="todos">
             {todos.map((t, i) => (
@@ -335,7 +477,6 @@ export default function App() {
                 }}
                 onDragEnd={() => {
                   drag.current = null
-                  setDragOverDay(null)
                 }}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => onDrop(i)}

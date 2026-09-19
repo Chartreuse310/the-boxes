@@ -18,6 +18,22 @@ export interface BoxesInfo {
   specVersion: string | null
 }
 
+/** 任务卡片的摘要信息（GET /api/tasks） */
+export interface TaskSummary {
+  slug: string
+  title: string
+  goal: string | null
+  status: string | null
+  created: string | null
+  total: number
+  done: number
+}
+
+export interface RawTask {
+  slug: string
+  content: string
+}
+
 export interface BoxesApi {
   /** 运行环境信息（数据目录、版本） */
   info(): Promise<BoxesInfo>
@@ -33,6 +49,16 @@ export interface BoxesApi {
   migrate(date: string, id: string, target: string): Promise<void>
   /** 按给定 id 顺序重排该日 todo */
   reorder(date: string, order: string[]): Promise<void>
+  /** 任务列表（卡片用摘要），按提出日期倒序 */
+  listTasks(): Promise<TaskSummary[]>
+  /** 读取某任务文件原文；文件不存在返回 null */
+  getTask(slug: string): Promise<RawTask | null>
+  /** 补齐任务文件缺失 id，返回最新原文 */
+  taskEnsureIds(slug: string): Promise<string>
+  /** 修改任务内某 todo 状态（三态） */
+  taskSetState(slug: string, id: string, state: string): Promise<void>
+  /** 按给定 id 顺序重排任务内 todo */
+  taskReorder(slug: string, order: string[]): Promise<void>
 }
 
 const httpApi: BoxesApi = {
@@ -79,6 +105,37 @@ const httpApi: BoxesApi = {
       body: JSON.stringify({ order }),
     })
     if (!r.ok) throw new Error(`reorder 失败：${r.status} ${await r.text()}`)
+  },
+  listTasks: async () => {
+    const r = await fetch('/api/tasks')
+    if (!r.ok) throw new Error(`listTasks 失败：${r.status}`)
+    return r.json()
+  },
+  getTask: async (slug) => {
+    const r = await fetch(`/api/tasks/${encodeURIComponent(slug)}`)
+    if (!r.ok) return null
+    return r.json()
+  },
+  taskEnsureIds: async (slug) => {
+    const r = await fetch(`/api/tasks/${encodeURIComponent(slug)}/ensure-ids`, { method: 'PUT' })
+    if (!r.ok) throw new Error(`taskEnsureIds 失败：${r.status} ${await r.text()}`)
+    return (await r.json()).content
+  },
+  taskSetState: async (slug, id, state) => {
+    const r = await fetch(`/api/tasks/${encodeURIComponent(slug)}/todos/${id}/state`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state }),
+    })
+    if (!r.ok) throw new Error(`taskSetState 失败：${r.status} ${await r.text()}`)
+  },
+  taskReorder: async (slug, order) => {
+    const r = await fetch(`/api/tasks/${encodeURIComponent(slug)}/reorder`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order }),
+    })
+    if (!r.ok) throw new Error(`taskReorder 失败：${r.status} ${await r.text()}`)
   },
 }
 

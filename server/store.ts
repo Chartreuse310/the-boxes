@@ -22,9 +22,14 @@ function inboxPath(dataDir: string, date: string): string {
   return path.join(dataDir, 'inbox', `${date}.md`)
 }
 
-/** 给无 id 的 todo 行补齐 `^xxxx`，写回文件 */
-export async function ensureIds(dataDir: string, date: string): Promise<void> {
-  const file = inboxPath(dataDir, date)
+/** 任务文件的绝对路径。slug 只许字母/数字/中文/下划线/连字符（防路径穿越）。 */
+export function taskPath(dataDir: string, slug: string): string {
+  if (!/^[\p{L}\p{N}_-]+$/u.test(slug)) throw new Error(`非法任务名：${slug}`)
+  return path.join(dataDir, 'tasks', `${slug}.md`)
+}
+
+/** 给无 id 的 todo 行补齐 `^xxxx`，写回文件（inbox 日文件与任务文件通用） */
+export async function ensureIdsInFile(file: string): Promise<void> {
   const content = await readFile(file, 'utf8')
   const lines = content.split('\n')
   const existing = new Set<string>()
@@ -51,19 +56,22 @@ export async function ensureIds(dataDir: string, date: string): Promise<void> {
   if (dirty) await writeFile(file, lines.join('\n'))
 }
 
+/** inbox 版：按日期定位文件 */
+export function ensureIds(dataDir: string, date: string): Promise<void> {
+  return ensureIdsInFile(inboxPath(dataDir, date))
+}
+
 /**
- * 修改某 id 的行状态。
+ * 修改某 id 的行状态（inbox 日文件与任务文件通用）。
  * - doing：写 @start:今天（若尚无）——开始日期
  * - done：写 @done:今天，清普通 @日期；保留 @start（完成时展示"始于…，完成于…"）
  * - todo：清 @done、@start 与 @日期，回到待处理
  */
-export async function setState(
-  dataDir: string,
-  date: string,
+export async function setTodoStateInFile(
+  file: string,
   id: string,
   state: TodoState,
 ): Promise<void> {
-  const file = inboxPath(dataDir, date)
   const content = await readFile(file, 'utf8')
   const lines = content.split('\n')
   const ch = STATE_CHAR[state]
@@ -99,6 +107,16 @@ export async function setState(
     return
   }
   throw new Error(`todo 不存在：^${id}`)
+}
+
+/** inbox 版：按日期定位文件 */
+export function setState(
+  dataDir: string,
+  date: string,
+  id: string,
+  state: TodoState,
+): Promise<void> {
+  return setTodoStateInFile(inboxPath(dataDir, date), id, state)
 }
 
 /**
@@ -149,15 +167,10 @@ export async function migrateTodo(
 }
 
 /**
- * 按给定 id 顺序重排 todo 行。只在"纯 todo 块"内移动；
- * 非 todo 行（标题、空行）保持相对位置，绝不重写。
+ * 按给定 id 顺序重排 todo 行（inbox 日文件与任务文件通用）。
+ * 只在"纯 todo 块"内移动；非 todo 行（标题、空行）保持相对位置，绝不重写。
  */
-export async function reorder(
-  dataDir: string,
-  date: string,
-  order: string[],
-): Promise<void> {
-  const file = inboxPath(dataDir, date)
+export async function reorderInFile(file: string, order: string[]): Promise<void> {
   const content = await readFile(file, 'utf8')
   const lines = content.split('\n')
   const idToLine = new Map<string, string>()
@@ -175,8 +188,8 @@ export async function reorder(
   const validOrder = order.filter((id) => idToLine.has(id))
   if (validOrder.length !== todoIndexes.length) {
     // 数量不符说明有 todo 无 id 或缺行：先补齐再交还。
-    await ensureIds(dataDir, date)
-    return reorder(dataDir, date, order)
+    await ensureIdsInFile(file)
+    return reorderInFile(file, order)
   }
 
   const newLines = [...lines]
@@ -184,6 +197,11 @@ export async function reorder(
     newLines[todoIndexes[idx]] = idToLine.get(id)!
   })
   await writeFile(file, newLines.join('\n'))
+}
+
+/** inbox 版：按日期定位文件 */
+export function reorder(dataDir: string, date: string, order: string[]): Promise<void> {
+  return reorderInFile(inboxPath(dataDir, date), order)
 }
 
 /** 生成 4 位 base36 随机短 id */
@@ -212,5 +230,3 @@ export async function touchDay(dataDir: string, date: string): Promise<void> {
   await ensureInboxDir(dataDir)
   await writeFile(inboxPath(dataDir, date), `# ${date}\n\n`)
 }
-
-export { inboxPath }
