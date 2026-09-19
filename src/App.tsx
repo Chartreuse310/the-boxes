@@ -9,6 +9,14 @@ function today(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
+/** 某日的次日（YYYY-MM-DD，本地时区） */
+function nextDay(date: string): string {
+  const d = new Date(date + 'T00:00:00')
+  d.setDate(d.getDate() + 1)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
 /** 状态 → box 内字形（the-boxes 的品牌就是这五个盒子）
  *  done / doing 不在表内：它们不用字形，改由矢量绘制（<DoneCheck /> / <DoingHalf />，见下）。
  *  类型上直接排除这两个状态，而不是留一个用不到的 '✓' '/' —— 免得后来者以为改这里能改符号。 */
@@ -213,15 +221,17 @@ export default function App() {
     reload(selected)
   }
 
-  // 迁移：state=[>] 今天 / [<] 所选日
+  // 迁移（SPEC v1.3 物理移动）：原行改 [>] / [<] 留在原文件作记录，
+  // 目标日文件新建同名 [ ] 待办。目标文件可能是新建的，需刷新日期列表。
   const migrate = async (todo: Todo, target: 'today' | 'later', laterDate?: string) => {
     if (selected === null || !todo.id) return
     const state: TodoState = target === 'today' ? 'deferred' : 'scheduled'
     const migrateDate = target === 'today' ? today() : laterDate
-    if (!migrateDate) return
-    await api.setState(selected, todo.id, state, migrateDate)
+    if (!migrateDate || migrateDate === selected) return // 目标即本文件：无迁移意义
+    await api.migrate(selected, todo.id, state, migrateDate)
     setOpenMenu(null)
     setPickingDate(null)
+    api.listDays().then(setDays)
     reload(selected)
   }
 
@@ -363,7 +373,9 @@ export default function App() {
                 {t.task && <span className="chip chip-task">@{t.task}</span>}
                 {t.date && <span className="chip chip-date">@{t.date}</span>}
 
-                {t.id && (
+                {/* 迁移菜单只对 [ ] 与 [/] 开放：[>]/[<] 是迁移记录、[x] 已完结，
+                    再迁会在目标文件产生重复副本 */}
+                {t.id && (t.state === 'todo' || t.state === 'doing') && (
                   <div className="menu-wrap">
                     <button
                       className="menu-trigger"
@@ -377,7 +389,10 @@ export default function App() {
                     </button>
                     {openMenu === t.id && (
                       <div className="menu">
-                        <button onClick={() => migrate(t, 'today')}>迁移到今天</button>
+                        {/* 查看今日文件时无"迁移到今天"——todo 本就在今天 */}
+                        {selected !== today() && (
+                          <button onClick={() => migrate(t, 'today')}>迁移到今天</button>
+                        )}
                         <button
                           onClick={() => setPickingDate(pickingDate === t.id ? null : t.id)}
                         >
@@ -387,7 +402,8 @@ export default function App() {
                           <input
                             type="date"
                             className="menu-date"
-                            min={today()}
+                            /* 查看今日时下限为明天（选今天等于没迁）；看过去时下限为今天 */
+                            min={selected === today() ? nextDay(today()) : today()}
                             onChange={(e) => {
                               if (e.target.value) migrate(t, 'later', e.target.value)
                             }}

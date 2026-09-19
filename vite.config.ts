@@ -1,12 +1,13 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
-import { readdir, readFile, writeFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
   ensureIds,
-  ensureInboxDir,
+  migrateTodo,
   reorder,
   setState,
+  touchDay,
   type TodoState,
 } from './server/store'
 
@@ -18,12 +19,6 @@ async function dayExistsFor(dataDir: string, date: string): Promise<boolean> {
   } catch {
     return false
   }
-}
-
-/** 某日文件不存在时，生成空文件（含标题 + 空行占位） */
-async function touchDay(dataDir: string, date: string): Promise<void> {
-  await ensureInboxDir(dataDir)
-  await writeFile(path.join(dataDir, 'inbox', `${date}.md`), `# ${date}\n\n`)
 }
 
 /**
@@ -162,6 +157,24 @@ function boxesApi(dataDir: string): Plugin {
             if (!allowed.includes(state)) throw new Error(`非法状态：${state}`)
             const migrateDate = typeof body.migrateDate === 'string' ? body.migrateDate : undefined
             await setState(dataDir, ms[1], ms[2], state as TodoState, migrateDate)
+            return { ok: true }
+          })
+          return
+        }
+
+        // PUT /api/days/:date/todos/:id/migrate : 迁移（SPEC v1.3 物理移动）
+        // 原行改 [>] / [<] 留记录；目标日文件新建同名 [ ] 待办（文件不存在则创建）
+        const mm = pathname.match(/^\/days\/(\d{4}-\d{2}-\d{2})\/todos\/([a-z0-9]+)\/migrate$/)
+        if (req.method === 'PUT' && mm) {
+          handle(async () => {
+            const body = await readBody()
+            const state = String(body.state ?? '')
+            if (state !== 'deferred' && state !== 'scheduled')
+              throw new Error(`非法迁移状态：${state}`)
+            const target = String(body.target ?? '')
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(target)) throw new Error(`非法目标日期：${target}`)
+            if (target === mm[1]) throw new Error('目标日期与源文件相同，无迁移意义')
+            await migrateTodo(dataDir, mm[1], mm[2], state, target)
             return { ok: true }
           })
           return

@@ -29,6 +29,8 @@ export interface BoxesApi {
   ensureIds(date: string): Promise<string>
   /** 修改某 todo 状态；migrateDate 用于迁移 [>]今天/[<]所选日 */
   setState(date: string, id: string, state: string, migrateDate?: string): Promise<void>
+  /** 迁移（SPEC v1.3）：原行改 [>] / [<] 留记录，目标日文件新建同名 [ ] 待办 */
+  migrate(date: string, id: string, state: 'deferred' | 'scheduled', target: string): Promise<void>
   /** 按给定 id 顺序重排该日 todo */
   reorder(date: string, order: string[]): Promise<void>
 }
@@ -61,6 +63,14 @@ const httpApi: BoxesApi = {
       body: JSON.stringify({ state, migrateDate }),
     })
     if (!r.ok) throw new Error(`setState 失败：${r.status} ${await r.text()}`)
+  },
+  migrate: async (date, id, state, target) => {
+    const r = await fetch(`/api/days/${date}/todos/${id}/migrate`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state, target }),
+    })
+    if (!r.ok) throw new Error(`migrate 失败：${r.status} ${await r.text()}`)
   },
   reorder: async (date, order) => {
     const r = await fetch(`/api/days/${date}/reorder`, {

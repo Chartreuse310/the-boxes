@@ -113,6 +113,57 @@ export async function setState(
 }
 
 /**
+ * 迁移（deferred=[>] 今天 / scheduled=[<] 所选日）：物理移动语义（SPEC v1.3）。
+ * - 原行：改 `[>]` / `[<]` 留在原文件作迁移记录，写 @目标日
+ * - 目标日文件：新建同名 `[ ]` 待办（保留 +任务，新 ^id；不带原行 @start/@done）
+ * - 目标文件不存在时创建（含标题，与 touchDay 同一路径）
+ */
+export async function migrateTodo(
+  dataDir: string,
+  fromDate: string,
+  id: string,
+  state: 'deferred' | 'scheduled',
+  targetDate: string,
+): Promise<void> {
+  // 1) 原行改状态 + @目标日（复用 setState 的迁移分支）
+  await setState(dataDir, fromDate, id, state, targetDate)
+
+  // 2) 提取净内容：文本 + 任务标签（去状态符、@token、^id）
+  const src = await readFile(inboxPath(dataDir, fromDate), 'utf8')
+  const line = src.split('\n').find((l) => l.match(ID_RE)?.[2] === id)
+  if (!line) return // setState 已成功；找不到说明数据异常，不再复制
+  const clean = line
+    .replace(/^-\s\[([ x/<>])\]\s*/, '')
+    .replace(/\s@start:\d{4}-\d{2}-\d{2}/g, '')
+    .replace(/\s@done:\d{4}-\d{2}-\d{2}/g, '')
+    .replace(/\s@\d{4}-\d{2}-\d{2}/g, '')
+    .replace(/\s\^[a-z0-9]+/i, '')
+    .trim()
+
+  // 3) 目标文件：不存在则创建；生成不冲突的新 id 后追加
+  const target = inboxPath(dataDir, targetDate)
+  let content: string
+  try {
+    content = await readFile(target, 'utf8')
+  } catch {
+    await touchDay(dataDir, targetDate)
+    content = await readFile(target, 'utf8')
+  }
+  const existing = new Set<string>()
+  for (const raw of content.split('\n')) {
+    const m = raw.match(ID_RE)
+    if (m) existing.add(m[2])
+  }
+  let newId: string
+  do {
+    newId = randomId()
+  } while (existing.has(newId))
+
+  const base = content === '' || content.endsWith('\n') ? content : content + '\n'
+  await writeFile(target, `${base}- [ ] ${clean} ^${newId}\n`)
+}
+
+/**
  * 按给定 id 顺序重排 todo 行。只在"纯 todo 块"内移动；
  * 非 todo 行（标题、空行）保持相对位置，绝不重写。
  */
@@ -169,6 +220,12 @@ export function localDate(): string {
 // inbox 目录可能不存在（用户刚建数据目录），方便时创建
 export async function ensureInboxDir(dataDir: string): Promise<void> {
   await mkdir(path.join(dataDir, 'inbox'), { recursive: true })
+}
+
+/** 某日文件不存在时，生成空文件（含标题 + 空行占位） */
+export async function touchDay(dataDir: string, date: string): Promise<void> {
+  await ensureInboxDir(dataDir)
+  await writeFile(inboxPath(dataDir, date), `# ${date}\n\n`)
 }
 
 export { inboxPath }
