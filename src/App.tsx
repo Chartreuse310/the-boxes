@@ -771,13 +771,19 @@ export default function App() {
         style={{ '--i': i } as import('react').CSSProperties}
         draggable={!!t.id}
         onDoubleClick={() => t.id && setEditingKey(key)}
-        onDragStart={() => {
-          if (t.id) drag.current = { index: i, id: t.id, source: t.source }
+        onDragStart={(e) => {
+          if (!t.id) return
+          // 声明这是移动而非复制：否则浏览器默认在游标旁画「+」角标，误导成「会复制」
+          e.dataTransfer.effectAllowed = 'move'
+          drag.current = { index: i, id: t.id, source: t.source }
         }}
         onDragEnd={() => {
           drag.current = null
         }}
-        onDragOver={(e) => e.preventDefault()}
+        onDragOver={(e) => {
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'move' // 落点也标移动，与日历迁移手感一致
+        }}
         onDrop={() => onDrop(i)}
       >
         <button
