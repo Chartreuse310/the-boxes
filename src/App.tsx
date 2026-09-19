@@ -188,17 +188,23 @@ export default function App() {
   const totalCount = todos?.length ?? 0
   const donePct = totalCount ? Math.round((doneCount / totalCount) * 100) : 0
 
-  // footer 说明：数据目录 + 版本。两者都来自 /api/info，界面里不存这两个值，
-  // 所以 SPEC / package.json 升级后这里不会变成谎话。缺项自动省略。
+  // footer 说明：数据目录 + 版本，不带标签。两者都来自 /api/info，
+  // 界面里不存这两个值，所以 SPEC / package.json 升级后这里不会变成谎话。
   const footerInfo =
     info &&
     [
-      `数据 ${shortDir(info.dataDir, info.home)}`,
+      shortDir(info.dataDir, info.home),
       info.version && `v${info.version}`,
-      info.specVersion && `数据格式 SPEC v${info.specVersion}`,
+      info.specVersion && `SPEC v${info.specVersion}`,
     ]
       .filter(Boolean)
       .join(' · ')
+
+  // 空态要指出 todo 的来源文件。用 /api/info 给的实际数据目录，而不是默认路径——
+  // 原实现写死 ~/the-boxes，配过 .env 的用户会看到一条指向不存在文件的指引。
+  const inboxFile = info
+    ? `${shortDir(info.dataDir, info.home)}/inbox/${selected}.md`
+    : `inbox/${selected}.md`
 
   return (
     <div className="app">
@@ -249,7 +255,7 @@ export default function App() {
           <p className="muted empty">
             这一天还没有 todo。
             <br />
-            在数据目录的 <code>inbox/{selected}.md</code> 里加一行，保存后刷新即可看到。
+            在 <code>{inboxFile}</code> 里加一行，保存后刷新即可看到。
           </p>
         ) : (
           <ul className="todos">
@@ -276,19 +282,17 @@ export default function App() {
                 </button>
                 <span className="text">
                   {t.text}
-                  {/* 日期注记（§5.1）：不用破折号、不用 emoji。
-                      同日起止不写成区间——「9/19 → 9/19」没有信息量，只报完成日。 */}
-                  {t.startDate && t.doneDate && t.startDate !== t.doneDate && (
+                  {/* 日期注记：沿用文件里的 ISO 日期（与 Markdown 原文对得上）和原始措辞。
+                      这是 §5.1「界面不用 emoji / 不用破折号拼注记」的既定例外。 */}
+                  {t.startDate && (
                     <span className="done-note">
                       {' '}
-                      {fmtDate(t.startDate)} → {fmtDate(t.doneDate)}
+                      ——始于 {t.startDate} 🛫
+                      {t.doneDate && <>，完成于 {t.doneDate} 🎉</>}
                     </span>
                   )}
-                  {t.doneDate && (!t.startDate || t.startDate === t.doneDate) && (
-                    <span className="done-note"> 完成 {fmtDate(t.doneDate)}</span>
-                  )}
-                  {t.startDate && !t.doneDate && (
-                    <span className="done-note"> 始于 {fmtDate(t.startDate)}</span>
+                  {!t.startDate && t.doneDate && (
+                    <span className="done-note"> ——完成于 {t.doneDate} 🎉</span>
                   )}
                 </span>
                 {t.task && <span className="chip chip-task">{t.task}</span>}
