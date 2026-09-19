@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.19（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.20（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -585,20 +585,12 @@ h1 {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-focus);
 }
-/* 第二行：所在文件 / 开始 / 完成 并排（可换行） */
+/* 第二行：开始 / 完成 / 状态 并排（可换行） */
 .edit-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 16px;
-}
-.edit-loc {
-  width: 14em;
-}
-@media (max-width: 720px) {
-  .edit-loc {
-    width: 11em;
-  }
 }
 /* 派生态预览：静态标记，去掉按钮态的悬停缩放（底色沿用各态自身） */
 .edit .box {
@@ -654,17 +646,39 @@ h1 {
 .edit-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
 }
-.edit-state {
+/* 状态按钮：点按循环 待办/进行中/完成，底层写开始·完成日期。盒图标 + 中文名。 */
+.status-btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  font: inherit;
+  font-size: var(--fs-label);
+  color: var(--text);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-control);
+  padding: 4px 10px 4px 6px;
+  cursor: pointer;
 }
-.edit-hint {
-  font-size: var(--fs-meta);
-  color: var(--text-secondary);
+.status-btn:hover {
+  background: var(--bg-hover);
+}
+.status-btn:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-focus);
+}
+/* 所在文件独占一行：输入框吃满剩余宽度 */
+.edit-loc-field {
+  width: 100%;
+}
+.edit-loc-field .edit-loc {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
 }
 .edit-btns {
   display: flex;

@@ -404,6 +404,17 @@ function TodoEditor(props: {
   const derived: TodoState = done ? 'done' : start ? 'doing' : 'todo'
   const locId = `loc-${todo.id ?? 'new'}`
 
+  // 状态切换：点按沿 待办→进行中→完成→待办 循环，底层只动开始/完成日期（日期仍是事实源）。
+  // 进行中补今天为开始；完成补今天为完成（保留开始）；回到待办清空两者。
+  const cycleStatus = () => {
+    if (derived === 'todo') setStart((s) => s || today())
+    else if (derived === 'doing') setDone((d) => d || today())
+    else {
+      setStart('')
+      setDone('')
+    }
+  }
+
   const save = async () => {
     if (!todo.id) return
     try {
@@ -438,28 +449,8 @@ function TodoEditor(props: {
         aria-label="描述"
       />
 
-      {/* 第二行：所在文件 / 开始 / 完成。状态由起止时间派生（见操作行的盒子）。 */}
+      {/* 第二行：开始 日期 · 完成 日期 · 状态（点按循环，底层写开始/完成日期） */}
       <div className="edit-row">
-        <label className="edit-field">
-          <span className="edit-cap">所在文件</span>
-          <input
-            className="edit-loc"
-            list={locId}
-            value={loc}
-            onChange={(e) => setLoc(e.target.value)}
-            placeholder="日期 / 任务名"
-            aria-label="所在文件"
-            autoComplete="off"
-          />
-          <datalist id={locId}>
-            {tasks.map((t) => (
-              <option key={`t:${t.month}/${t.slug}`} value={t.slug} label={`${t.month} · ${t.title}`} />
-            ))}
-            {days.map((d) => (
-              <option key={`d:${d}`} value={d} label="日期" />
-            ))}
-          </datalist>
-        </label>
         <label className="edit-field">
           <span className="edit-cap">开始</span>
           <input type="date" value={start} onChange={(e) => setStart(e.target.value)} aria-label="开始日期" />
@@ -478,17 +469,44 @@ function TodoEditor(props: {
             </button>
           )}
         </label>
-      </div>
-
-      <div className="edit-actions">
-        <span className="edit-state">
-          <span className={'box box-' + derived} aria-hidden title={STATE_LABEL[derived]}>
+        <button
+          type="button"
+          className="status-btn"
+          onClick={cycleStatus}
+          aria-label={`状态：${STATE_LABEL[derived]}，点按切换待办 / 进行中 / 完成`}
+        >
+          <span className={'box box-' + derived} aria-hidden>
             <span className="box-sym">
               {derived === 'done' ? <DoneCheck /> : derived === 'doing' ? <DoingHalf /> : null}
             </span>
           </span>
-          <span className="edit-hint">{STATE_LABEL[derived]}</span>
-        </span>
+          {STATE_LABEL[derived]}
+        </button>
+      </div>
+
+      {/* 第三行：所在文件（可输入下拉单选：选已有 / 输入新名建任务 / 清空回当日） */}
+      <label className="edit-field edit-loc-field">
+        <span className="edit-cap">所在文件</span>
+        <input
+          className="edit-loc"
+          list={locId}
+          value={loc}
+          onChange={(e) => setLoc(e.target.value)}
+          placeholder="日期 / 任务名"
+          aria-label="所在文件"
+          autoComplete="off"
+        />
+        <datalist id={locId}>
+          {tasks.map((t) => (
+            <option key={`t:${t.month}/${t.slug}`} value={t.slug} label={`${t.month} · ${t.title}`} />
+          ))}
+          {days.map((d) => (
+            <option key={`d:${d}`} value={d} label="日期" />
+          ))}
+        </datalist>
+      </label>
+
+      <div className="edit-actions">
         <div className="edit-btns">
           <button type="button" className="btn" onClick={onCancel}>
             取消
