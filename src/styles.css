@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.8（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.9（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -281,17 +281,14 @@ h1 {
   background: var(--text-secondary);
 }
 
-/* ---------- 任务卡片：名称 + 一句话简介 + 进度 ---------- */
+/* ---------- 任务卡片：名称 + 一句话简介 ---------- */
 .task-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 .task-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
-  column-gap: 8px;
+  display: block;
   width: 100%;
   padding: 8px;
   border: none;
@@ -313,7 +310,7 @@ h1 {
   background: var(--bg-sunken);
 }
 .task-name {
-  grid-column: 1;
+  display: block;
   font-size: var(--fs-label);
   font-weight: 500;
   color: var(--text);
@@ -321,14 +318,8 @@ h1 {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.task-progress {
-  grid-column: 2;
-  font-size: var(--fs-meta);
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
-}
 .task-goal {
-  grid-column: 1 / -1;
+  display: block;
   font-size: var(--fs-meta);
   color: var(--text-secondary);
   overflow: hidden;
@@ -336,9 +327,35 @@ h1 {
   white-space: nowrap;
 }
 
+/* ---------- 顶部标题「接下来干啥？」 ---------- */
+/* 点击回到平铺（all 时已在平铺，点击无变化）。负 margin 抵消按钮自身的
+   左 padding，让文字与列表左缘对齐 */
+.feed-title {
+  display: block;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: var(--fs-title);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  cursor: pointer;
+  padding: 4px 8px;
+  margin: 0 0 16px -8px;
+  border-radius: var(--radius-control);
+  transition: background var(--dur-fast) var(--ease);
+}
+.feed-title:hover {
+  background: var(--bg-hover);
+}
+.feed-title:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-focus);
+}
+
 /* ---------- 任务详情头（任务视图顶部，day 视图不渲染） ---------- */
 .task-header {
-  margin: 4px 0 16px;
+  margin: 0 0 16px;
 }
 .task-title {
   font-size: var(--fs-title);
@@ -355,37 +372,6 @@ h1 {
   font-size: var(--fs-meta);
   color: var(--text-secondary);
   margin: 0;
-}
-
-/* ---------- 当日进度条 ---------- */
-.day-status {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.day-status-label {
-  flex: none;
-  font-size: var(--fs-label);
-  font-weight: 500;
-  color: var(--text-secondary);
-  letter-spacing: 0.01em;
-  font-variant-numeric: tabular-nums;
-}
-.bar {
-  flex: 1;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--bg-sunken);
-  overflow: hidden;
-}
-/* 进度表达"完成度"，与 --c-done 同义，属强化而非跨义复用 */
-.bar-fill {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--c-done);
-  transition: width var(--dur-base) var(--ease);
 }
 
 /* ---------- 列表 ---------- */

@@ -11,7 +11,7 @@ import {
   touchDay,
   type TodoState,
 } from './server/store'
-import { parseTask } from './src/lib/parser'
+import { parseInbox, parseTask } from './src/lib/parser'
 
 /** 某日文件是否存在 */
 async function dayExistsFor(dataDir: string, date: string): Promise<boolean> {
@@ -193,6 +193,48 @@ function boxesApi(dataDir: string): Plugin {
             const order = (body.order as string[]) ?? []
             await reorderInFile(path.join(dataDir, 'inbox', `${mr[1]}.md`), order)
             return { ok: true }
+          })
+          return
+        }
+
+        // —— 全部平铺（默认视图）——
+        // GET /api/all : 所有文件的 todo，各附来源（day:date / task:slug）。
+        // 顺序：inbox 日期倒序在前（最新一天最先），任务按提出日倒序在后。
+        if (req.method === 'GET' && /^\/all\/?$/.test(pathname)) {
+          handle(async () => {
+            const out: Record<string, unknown>[] = []
+            let dayFiles: string[] = []
+            try {
+              dayFiles = await readdir(path.join(dataDir, 'inbox'))
+            } catch {
+              /* inbox 目录不存在 = 无日期记录 */
+            }
+            const dates = dayFiles.filter((f) => /^\d{4}-\d{2}-\d{2}\.md$/.test(f)).sort().reverse()
+            for (const f of dates) {
+              const date = f.replace(/\.md$/, '')
+              const todos = parseInbox(await readFile(path.join(dataDir, 'inbox', f), 'utf8'))
+              for (const t of todos) out.push({ ...t, source: { kind: 'day', date } })
+            }
+            let taskFiles: string[] = []
+            try {
+              taskFiles = await readdir(path.join(dataDir, 'tasks'))
+            } catch {
+              /* tasks/ 不存在 = 暂无任务 */
+            }
+            const tasks = await Promise.all(
+              taskFiles
+                .filter((f) => f.endsWith('.md'))
+                .map(async (f) => {
+                  const slug = f.replace(/\.md$/, '')
+                  const meta = parseTask(await readFile(path.join(dataDir, 'tasks', f), 'utf8'))
+                  return { slug, created: meta.created, todos: meta.todos }
+                }),
+            )
+            tasks.sort((a, b) => (b.created ?? '').localeCompare(a.created ?? '') || a.slug.localeCompare(b.slug))
+            for (const tk of tasks) {
+              for (const t of tk.todos) out.push({ ...t, source: { kind: 'task', slug: tk.slug } })
+            }
+            return { todos: out }
           })
           return
         }

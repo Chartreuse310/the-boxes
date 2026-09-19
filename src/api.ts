@@ -1,6 +1,8 @@
 // API 层：界面只依赖这组接口（M1 打包 Tauri 时替换实现，界面代码不动）。
 // 开发期实现：走 Vite 本地文件服务，见 vite.config.ts 的 boxesApi 插件。
 
+import type { Todo } from './lib/parser'
+
 export interface RawDay {
   date: string
   content: string
@@ -34,6 +36,14 @@ export interface RawTask {
   content: string
 }
 
+/** todo 的来源文件：day = inbox 日期文件，task = 任务文件 */
+export type TodoSource = { kind: 'day'; date: string } | { kind: 'task'; slug: string }
+
+/** 平铺视图的 todo：解析结果 + 来源（点击/迁移按来源分叉调接口） */
+export interface SourcedTodo extends Todo {
+  source: TodoSource
+}
+
 export interface BoxesApi {
   /** 运行环境信息（数据目录、版本） */
   info(): Promise<BoxesInfo>
@@ -59,6 +69,8 @@ export interface BoxesApi {
   taskSetState(slug: string, id: string, state: string): Promise<void>
   /** 按给定 id 顺序重排任务内 todo */
   taskReorder(slug: string, order: string[]): Promise<void>
+  /** 平铺视图：全部 todo（inbox 日期倒序在前，任务按提出日倒序在后），各附来源 */
+  listAll(): Promise<SourcedTodo[]>
 }
 
 const httpApi: BoxesApi = {
@@ -136,6 +148,11 @@ const httpApi: BoxesApi = {
       body: JSON.stringify({ order }),
     })
     if (!r.ok) throw new Error(`taskReorder 失败：${r.status} ${await r.text()}`)
+  },
+  listAll: async () => {
+    const r = await fetch('/api/all')
+    if (!r.ok) throw new Error(`listAll 失败：${r.status}`)
+    return (await r.json()).todos
   },
 }
 

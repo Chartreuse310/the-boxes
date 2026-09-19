@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, type BoxesInfo, type TaskSummary } from './api'
-import { parseInbox, parseTask, type TaskMeta, type Todo, type TodoState } from './lib/parser'
+import { api, type BoxesInfo, type SourcedTodo, type TaskSummary } from './api'
+import { parseInbox, parseTask, type TaskMeta, type TodoState } from './lib/parser'
 
-/** 主视图：正在看哪一天的 inbox，或哪个任务 */
-type View = { kind: 'day'; date: string } | { kind: 'task'; slug: string }
+/**
+ * 主视图：默认平铺（all），点日历某天 / 任务卡片进入筛选（day / task），
+ * 点顶部「接下来干啥？」回到平铺。
+ */
+type View = { kind: 'all' } | { kind: 'day'; date: string } | { kind: 'task'; slug: string }
 
 /** 本地时区的今日日期（YYYY-MM-DD） */
 function today(): string {
@@ -75,8 +78,8 @@ function DoneCheck() {
 /**
  * 进行中：半填充圆 —— 一个圆被 45° 的 `/` 分成两半，左上那半填满、右下留空。
  *
- * 方向依据：填的是"先到"的那半。列表阅读方向是左→右、上→下，进度条
- * （`.bar-fill`）也是从左端起填，所以半填充取左上而不是右下。
+ * 方向依据：填的是"先到"的那半。列表阅读方向是左→右、上→下，
+ * 所以半填充取左上而不是右下。
  * 等价说法：Unicode ◐「左半实心」整体顺时针转 45°，实心部分就落在左上。
  *
  * 为什么不用渐变做半填充：渐变要额外引入一个色值（v0.2 的 `--c-doing-tint`
@@ -248,20 +251,20 @@ function MiniCalendar(props: {
 export default function App() {
   const [days, setDays] = useState<string[]>([])
   const [tasks, setTasks] = useState<TaskSummary[]>([])
-  // 当前视图：某日的 inbox 或某个任务
+  // 当前视图：平铺 / 某日 inbox / 某任务
   const [view, setView] = useState<View | null>(null)
-  const [todos, setTodos] = useState<Todo[] | null>(null)
-  // 任务视图的元数据（day 视图为 null）
+  const [todos, setTodos] = useState<SourcedTodo[] | null>(null)
+  // 任务视图的元数据（day / all 视图为 null）
   const [taskMeta, setTaskMeta] = useState<TaskMeta | null>(null)
-  // 拖动中的 todo：列表内 drop → 重排；日历日期上 drop → 迁移
-  const drag = useRef<{ index: number; id: string } | null>(null)
+  // 拖动中的 todo：day 视图列表内 drop → 重排；拖到日历日期上 → 迁移
+  const drag = useRef<{ index: number; id: string; source: SourcedTodo['source'] } | null>(null)
   // 运行环境信息（数据目录 / 版本）：只用于 footer。取不到就不显示那一段，不阻塞界面。
   const [info, setInfo] = useState<BoxesInfo | null>(null)
 
   const loadDay = async (date: string) => {
     const day = await api.getDay(date)
     setTaskMeta(null)
-    setTodos(day ? parseInbox(day.content) : [])
+    setTodos(day ? parseInbox(day.content).map((t) => ({ ...t, source: { kind: 'day', date } })) : [])
   }
 
   const loadTask = async (slug: string) => {
@@ -273,7 +276,21 @@ export default function App() {
     }
     const parsed = parseTask(raw.content)
     setTaskMeta(parsed)
-    setTodos(parsed.todos)
+    setTodos(parsed.todos.map((t) => ({ ...t, source: { kind: 'task', slug } })))
+  }
+
+  const loadAll = async () => {
+    const all = await api.listAll()
+    setTaskMeta(null)
+    setTodos(all)
+  }
+
+  /** 按当前视图重新加载（写操作后刷新用） */
+  const refreshView = () => {
+    if (view === null) return
+    if (view.kind === 'all') loadAll()
+    else if (view.kind === 'day') loadDay(view.date)
+    else loadTask(view.slug)
   }
 
   // 环境信息：与日期列表无关，只需一次
@@ -281,13 +298,10 @@ export default function App() {
     api.info().then(setInfo).catch(() => setInfo(null))
   }, [])
 
-  // 启动：拉日期与任务列表，默认查看今日（无记录则最近一天）
+  // 启动：默认平铺所有 todo；日期与任务列表供日历圆点 / 卡片使用
   useEffect(() => {
-    api.listDays().then((ds) => {
-      setDays(ds)
-      const t = today()
-      setView({ kind: 'day', date: ds.includes(t) ? t : (ds[0] ?? t) })
-    })
+    setView({ kind: 'all' })
+    api.listDays().then(setDays).catch(() => setDays([]))
     api.listTasks().then(setTasks).catch(() => setTasks([]))
   }, [])
 
@@ -299,13 +313,15 @@ export default function App() {
       return
     }
     setTodos(null)
-    if (view.kind === 'day') loadDay(view.date)
+    if (view.kind === 'all') loadAll()
+    else if (view.kind === 'day') loadDay(view.date)
     else loadTask(view.slug)
   }, [view])
 
-  // 点击 box：三态前进（todo→doing→done，done 停住）
-  const cycleState = async (todo: Todo, index: number) => {
-    if (view === null || !todo.id) return
+  // 点击 box：三态前进（todo→doing→done，done 停住）。
+  // 接口按该行自己的来源分叉（平铺视图里 inbox 行与任务行混在一起）
+  const cycleState = async (todo: SourcedTodo, index: number) => {
+    if (!todo.id) return
     const next = nextState(todo.state)
     if (!next) return // 已到 done 终态 → 不响应点击
     setTodos((prev) => {
@@ -314,32 +330,33 @@ export default function App() {
       copy[index] = { ...todo, state: next }
       return copy
     })
-    if (view.kind === 'day') await api.setState(view.date, todo.id, next)
-    else await api.taskSetState(view.slug, todo.id, next)
-    // 任务视图顺手刷新卡片上的进度数字
-    if (view.kind === 'task') api.listTasks().then(setTasks).catch(() => {})
-    if (view.kind === 'day') loadDay(view.date)
-    else loadTask(view.slug)
+    if (todo.source.kind === 'day') await api.setState(todo.source.date, todo.id, next)
+    else await api.taskSetState(todo.source.slug, todo.id, next)
+    if (todo.source.kind === 'task') api.listTasks().then(setTasks).catch(() => {})
+    refreshView()
   }
 
   // 拖拽迁移（SPEC v2.0 物理移动）：todo 行原样移动到目标日文件。
-  // 只对 day 视图开放——任务内的 todo 拖到日期属跨容器移动，语义待 M2 定义。
+  // 只对 inbox 来源的行开放（平铺或 day 视图均可）——任务文件里的 todo
+  // 拖到日期属跨容器移动，语义待 M2 定义。
   const migrateTo = async (target: string) => {
     const dragged = drag.current
     drag.current = null
-    if (!dragged || view?.kind !== 'day' || target === view.date) return
-    await api.migrate(view.date, dragged.id, target)
+    if (!dragged || dragged.source.kind !== 'day' || target === dragged.source.date) return
+    await api.migrate(dragged.source.date, dragged.id, target)
     api.listDays().then(setDays)
-    loadDay(view.date)
+    refreshView()
   }
 
-  // 拖动重排：drop 时按新 id 顺序提交（day 与 task 共用同一套渲染，接口分叉）。
+  // 拖动重排：drop 时按新 id 顺序提交（day 与 task 筛选视图共用，接口分叉）。
+  // 平铺视图不重排——行来自不同文件，顺序没有全序意义（迁移走日历）。
   // 新顺序从当前 todos 直接算，不经 setTodos 的 updater 收集——
   // React 18 批处理下 updater 是 re-render 时才执行的，同步代码读不到它赋的值。
   const onDrop = async (targetIndex: number) => {
     const from = drag.current
     drag.current = null
     if (!from || from.index === targetIndex || view === null || !todos) return
+    if (view.kind === 'all') return
     const copy = [...todos]
     const [moved] = copy.splice(from.index, 1)
     copy.splice(targetIndex, 0, moved)
@@ -348,10 +365,6 @@ export default function App() {
     if (view.kind === 'day') await api.reorder(view.date, newOrder)
     else await api.taskReorder(view.slug, newOrder)
   }
-
-  const doneCount = todos?.filter((t) => t.state === 'done').length ?? 0
-  const totalCount = todos?.length ?? 0
-  const donePct = totalCount ? Math.round((doneCount / totalCount) * 100) : 0
 
   // footer 说明：数据目录 + 版本，不带标签。两者都来自 /api/info，
   // 界面里不存这两个值，所以 SPEC / package.json 升级后这里不会变成谎话。
@@ -367,10 +380,8 @@ export default function App() {
 
   // 空态要指出 todo 的来源文件。用 /api/info 给的实际数据目录，而不是默认路径——
   // 原实现写死 ~/the-boxes，配过 .env 的用户会看到一条指向不存在文件的指引。
-  const inboxFile =
-    info && view?.kind === 'day'
-      ? `${shortDir(info.dataDir, info.home)}/inbox/${view.date}.md`
-      : `inbox/${view?.kind === 'day' ? view.date : '日期'}.md`
+  const dataRoot = info ? shortDir(info.dataDir, info.home) : ''
+  const inboxFile = `${dataRoot}/inbox/${view?.kind === 'day' ? view.date : '日期'}.md`
 
   const todayStr = today()
 
@@ -414,9 +425,6 @@ export default function App() {
                 >
                   <span className="task-name">{t.title}</span>
                   {t.goal && <span className="task-goal">{t.goal}</span>}
-                  <span className="task-progress" aria-label={`${t.done}/${t.total} 完成`}>
-                    {t.done}/{t.total}
-                  </span>
                 </button>
               ))}
             </nav>
@@ -424,6 +432,19 @@ export default function App() {
         </aside>
 
         <main>
+        {/* 顶部标题：点击回到平铺（all 时已在平铺，点击无变化） */}
+        {view && (
+          <button
+            type="button"
+            className="feed-title"
+            onClick={() => {
+              if (view.kind !== 'all') setView({ kind: 'all' })
+            }}
+            aria-current={view.kind === 'all' ? 'true' : undefined}
+          >
+            接下来干啥？
+          </button>
+        )}
         {/* 任务详情头：名称 + 目标 + 状态行 */}
         {view?.kind === 'task' && taskMeta && (
           <div className="task-header">
@@ -438,16 +459,6 @@ export default function App() {
             )}
           </div>
         )}
-        {todos && todos.length > 0 && (
-          <div className="day-status" role="progressbar" aria-valuenow={donePct} aria-label={`${doneCount}/${totalCount} 完成`}>
-            <span className="day-status-label">
-              {doneCount}/{totalCount} 完成
-            </span>
-            <div className="bar">
-              <span className="bar-fill" style={{ width: `${donePct}%` }} />
-            </div>
-          </div>
-        )}
         {todos === null ? (
           <p className="muted">加载中…</p>
         ) : todos.length === 0 ? (
@@ -457,11 +468,17 @@ export default function App() {
               <br />
               在 <code>tasks/{view.slug}.md</code> 的「## todos」下加一行，保存后刷新即可看到。
             </p>
-          ) : (
+          ) : view?.kind === 'day' ? (
             <p className="muted empty">
               这一天还没有 todo。
               <br />
               在 <code>{inboxFile}</code> 里加一行，保存后刷新即可看到。
+            </p>
+          ) : (
+            <p className="muted empty">
+              还没有任何 todo。
+              <br />
+              在 <code>{dataRoot}/inbox/日期.md</code> 或 <code>{dataRoot}/tasks/任务.md</code> 里加一行，保存后刷新即可看到。
             </p>
           )
         ) : (
@@ -473,7 +490,7 @@ export default function App() {
                 style={{ '--i': i } as import('react').CSSProperties}
                 draggable={!!t.id}
                 onDragStart={() => {
-                  if (t.id) drag.current = { index: i, id: t.id }
+                  if (t.id) drag.current = { index: i, id: t.id, source: t.source }
                 }}
                 onDragEnd={() => {
                   drag.current = null
@@ -514,6 +531,12 @@ export default function App() {
                     日期用完整 ISO（那也是当日的文件名），任务统一用 @ 记号。 */}
                 {t.task && <span className="chip chip-task">@{t.task}</span>}
                 {t.date && <span className="chip chip-date">@{t.date}</span>}
+                {/* 平铺视图：行尾标来源文件（筛选视图不需要——筛选本身已指明文件） */}
+                {view?.kind === 'all' && (
+                  <span className="chip chip-source">
+                    {t.source.kind === 'day' ? `@${t.source.date}` : `@${t.source.slug}`}
+                  </span>
+                )}
               </li>
             ))}
           </ul>
