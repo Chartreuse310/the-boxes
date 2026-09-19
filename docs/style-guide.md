@@ -1,48 +1,47 @@
 # the-boxes · 界面风格规则（Style Guide）
 
-> 版本 v0.1 · 2026-09-19 · 参考 [obsidian-minimal](https://github.com/kepano/obsidian-minimal)（MIT License，Copyright (c) 2020-2024 Steph Ango）的设计理念。本文定义 the-boxes 的设计 token 与易用性原则，供 M1/M5 及后续落地统一遵循。
+> 版本 v0.2 · 2026-09-19 · 设计系统沿用 [obsidian-minimal](https://github.com/kepano/obsidian-minimal)（MIT License，Copyright (c) 2020-2026 Steph Ango）。本文定义 the-boxes 的设计 token 与易用性原则，供 M1/M5 及后续落地统一遵循。
 
 ## 0. 版权说明
 
-- 本项目**只借鉴设计理念**（配色逻辑、留白节奏、字体栈、易读性），**不复制 obsidian-minimal 的代码**。
-- 设计理念/风格本身不受版权保护；如需引用其具体源码，遵守 MIT（保留版权声明）。
-- 本文件是 the-boxes 自己的风格规范，非转载。
+- 本项目**沿用 Minimal 的设计系统**：以单一 HSL 基准 `--base-h/s/l` 派生全部中性色、Inter 系字体栈、圆形 checkbox、完成项默认无删除线。已适配为 the-boxes 自己的 CSS 变量，非整体复制 Obsidian 主题代码。
+- obsidian-minimal 为 **MIT License**（Copyright 2020-2026 Steph Ango），本项目遵循其许可并在样式文件头部保留来源署名。
+- 若日后引入 Minimal 的 checkbox SVG 图标等具体实现，须连同其版权声明一并保留。
 
 ## 1. 设计理念（从 Minimal 继承，适配 todo 场景）
 
 1. **内容优先，去除干扰**：不装饰元素，用间距与层级而非颜色/阴影表达结构。每个额外的视觉元素都需要"为什么存在"。
-2. **低冲突配色**：背景低饱和，文本高对比；彩色仅用于承载"状态/语义"信息，克制使用。
+2. **单一色相派生**：全部中性色由一个 HSL 基准派生（可控 base 即整套配色），而非各处硬编码堆色。
 3. **易读性至上**：字号不小于阈值，行高充足，灰度文本可读；任何磨玻璃、动画、渐变不影响阅读。
 4. **空格即结构**：优先用留白分块，少用边框和分割线。
 5. **日日用的"轻"**：动效短而轻微，为反馈而非表演（呼应 PLAN 铁律 4"先日用后打磨"）。
 
 ## 2. 设计 Token（CSS 变量）
 
-从现有 `src/styles.css` 提炼，统一收录；落地时一律引用变量，禁止硬编码颜色/字号。
+### 2.1 中性色（由 --base-h/s/l 派生）
 
-### 2.1 颜色（浅色主题，当前阶段只有浅色）
-
-| Token | 值 | 用途 |
+| Token | 派生 | 用途 |
 |---|---|---|
-| `--bg-page` | `#f6f5f4` | 页面背景（低饱和暖灰） |
-| `--bg-card` | `#ffffff` | todo 卡片、输入框背景 |
-| `--bg-hover` | `#f5f5f4` | 行/按钮 hover |
-| `--bg-subtle` | `#f0efed` | chip、弱背景 |
-| `--text` | `#1c1917` | 主文本 |
-| `--text-subtle` | `#57534e` | 次要文本（菜单项） |
-| `--text-muted` | `#a8a29e` | 弱化文本（完成日期、触发按钮） |
-| `--border` | `#e9e6e3` | 卡片边框 |
-| `--border-strong` | `#ddd9d5` | 输入框边框、分割 |
-| `--accent` | `#2563eb` | 单一强调色（与"进行中"同色） |
+| `--base-h/-s/-l` | `0 / 0% / 96%` | 派生基准（Minimal light `hsl(0 0% 96%)`） |
+| `--bg-page` | base | 页面背景 |
+| `--bg-card` | 白 | 卡片、输入框 |
+| `--bg-hover` | l-6% | hover / 淡色 chip |
+| `--bg-subtle` | l-12% | chip、弱背景 |
+| `--text` | l-90% | 主文本 |
+| `--text-subtle` | l-25% | 次要文本 |
+| `--text-muted` | l-50% | 弱化文本（完成日期等） |
+| `--border` | l-12% | 卡片边框 |
+| `--border-strong` | l-20% | 输入框边框 |
 
-### 2.2 状态色（仅用于 box 图标 + 对应 chip，不用于页面主色）
+### 2.2 状态色（light 主题下 Minimal 语义色，仅用于 box + chip）
 
 | 状态 | Token | 值 |
 |---|---|---|
-| 完成 `[x]` | `--c-done` | `#16a34a` |
-| 进行 `[/]` | `--c-doing` | `#2563eb` |
-| 顺延 `[>]` | `--c-deferred` | `#ea580c` |
-| 排期 `[<]` | `--c-scheduled` | `#9333ea` |
+| 完成 `[x]` | `--c-done` | `#6e9151`（绿，MUDF） |
+| 进行 `[/]` | `--c-doing` | `#6c99bb`（蓝） |
+| 顺延 `[>]` | `--c-deferred` | `#d5763f`（橙，Minimal light orange） |
+| 排期 `[<]` | `--c-scheduled` | `#9e86c8`（紫，Minimal light purple） |
+| 强调/操作 | `--accent` | `#2563eb` |
 
 > 状态色为"辅助色"：即便色盲场景，也靠 box 符号区分（box 内打状态字符），颜色只是强化，不单独承载语义。
 
@@ -52,12 +51,12 @@
 |---|---|---|
 | `--chip-task-fg` | `#b45309` | `+任务` chip 文字 |
 | `--chip-date-fg` | `#7e22ce` | 日期 chip 文字 |
-| `--bg-code` | `#eee9e5` | code 内嵌背景 |
+| `--bg-code` | l-20% | code 内嵌背景 |
 
-### 2.4 字体栈（沿用现有）
+### 2.4 字体栈（沿用 Minimal system-first + Inter）
 
 ```
--apple-system, BlinkMacSystemFont, 'Segoe UI',
+-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Ubuntu,
 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif
 ```
 
@@ -72,7 +71,7 @@
 | 页面标题 h1 | 20px / 700 | 顶栏唯一大字 |
 | todo 文本 | 15px（默认） | 不小于 14px |
 | 辅助文本（chip、日期、done-note、菜单、footer） | 12–13px | 不低于 11px |
-| box 内状态字符 | 12px / 700 | 居中于 20px box |
+| box 内状态字符 | 12px / 500 | 居中于圆形 box（`--checkbox-size`） |
 
 - 行高：正文 ≥ 1.5；列表 item 垂直 padding 保证点击区域 ≥ 40px（易点中）。
 - 日期改用短格式展示（如 `9/19`）可减少视觉噪音——留待 M1 验证。
@@ -93,6 +92,13 @@
 - 相邻但关联弱的区域用 20px，无关分组用 28px+。多块之间少画线，靠留白。
 - 阴影仅用于浮层（menu、date-picker 下拉），用 `0 6px 20px rgba(28,25,23,0.12)` 等级别；普通卡片无投影。
 
+### 4.1 Checkbox（沿用 Minimal）
+
+- **形状**：圆形（`--checkbox-radius: 50%`），尺寸 `--checkbox-size = 15px × 0.85`，不低于 18px 保证可点。
+- **完成项**：默认**无删除线**（Minimal `--checklist-done-decoration: none`），以 box 符号 + 完成日期灰字表达。
+- **状态切换**：点击循环 `[ ] → [/] → [x]`，到完成停住；`[>]`/`[<]` 走悬停迁移菜单。
+- box 内显示状态字符（`/`/`x`/`>`/`<`），颜色只是强化，符号才是语义主通道。
+
 ## 5. 交互与动效
 
 - 动效时长：150ms 内（现有 hover `0.12s`、transition `0.06–0.12s` 合理）。
@@ -111,4 +117,5 @@
 
 ## 变更日志
 
+- **2026-09-19** v0.2：从"理念参考"升级为"设计系统沿用"。①配色改为 Minimal 的单一 HSL 基准派生体系（`--base-h:0/-s:0%/-l:96%`，对齐 light 主题），状态色改为 Minimal 语义色；②字体栈加 Inter；③checkbox 改为圆形小尺寸，完成项无删除线规则；④版权声明改为"沿用设计系统，遵循 MIT"。落地于 `src/styles.css`。
 - **2026-09-19** v0.1：初版。收编现有 styles.css 的颜色/字号/间距为设计 token；确立 5 条设计理念、字体栈、动效上限与落地检查清单；声明版权只借鉴理念不复制 Minimal 代码（MIT）。
