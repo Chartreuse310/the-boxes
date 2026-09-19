@@ -17,14 +17,17 @@ const STATE_SYMBOL: Record<TodoState, string> = {
   deferred: '>',
   scheduled: '<',
 }
-/** 状态循环顺序（点击 box 依次切换） */
-const STATE_CYCLE: TodoState[] = ['todo', 'doing', 'done', 'deferred', 'scheduled']
+/** 点击三态循环：只走到完成，停在 [x]，不回环 */
+const STATE_CYCLE: TodoState[] = ['todo', 'doing', 'done']
 
 export default function App() {
   const [days, setDays] = useState<string[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [todos, setTodos] = useState<Todo[] | null>(null)
   const dragIndex = useRef<number | null>(null)
+  // 悬停迁移菜单：记录当前打开的 todo id 及其"迁移到以后"是否在选日期
+  const [openMenu, setOpenMenu] = useState<string | null>(null)
+  const [pickingDate, setPickingDate] = useState<string | null>(null)
 
   const reload = async (date: string) => {
     const day = await api.getDay(date)
@@ -48,13 +51,16 @@ export default function App() {
     }
     setTodos(null)
     reload(selected)
+    setOpenMenu(null)
+    setPickingDate(null)
   }, [selected])
 
-  // 点击 box：循环切换状态，落盘后重载
+  // 点击 box：三态前进（todo→doing→done，done 停住）
   const cycleState = async (todo: Todo, index: number) => {
     if (selected === null || !todo.id) return
-    const next = STATE_CYCLE[(STATE_CYCLE.indexOf(todo.state) + 1) % STATE_CYCLE.length]
-    // 乐观更新
+    const cur = STATE_CYCLE.indexOf(todo.state)
+    if (cur === -1 || cur === STATE_CYCLE.length - 1) return // 非三态(done以外如 >/</迁出) 或已到 done → 不点
+    const next = STATE_CYCLE[cur + 1]
     setTodos((prev) => {
       if (!prev) return prev
       const copy = [...prev]
@@ -62,7 +68,19 @@ export default function App() {
       return copy
     })
     await api.setState(selected, todo.id, next)
-    reload(selected) // 后台落盘后精确刷新（含 @done 追加）
+    reload(selected)
+  }
+
+  // 迁移：state=[>] 今天 / [<] 所选日
+  const migrate = async (todo: Todo, target: 'today' | 'later', laterDate?: string) => {
+    if (selected === null || !todo.id) return
+    const state: TodoState = target === 'today' ? 'deferred' : 'scheduled'
+    const migrateDate = target === 'today' ? today() : laterDate
+    if (!migrateDate) return
+    await api.setState(selected, todo.id, state, migrateDate)
+    setOpenMenu(null)
+    setPickingDate(null)
+    reload(selected)
   }
 
   // 拖动重排：drop 时按新 id 顺序提交
@@ -125,7 +143,8 @@ export default function App() {
                 onDragStart={() => (dragIndex.current = i)}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => onDrop(i)}
-                title={t.id ? '拖拽调整顺序 · 点击左侧盒子切换状态' : '无 id，暂不支持编辑'}
+                title={t.id ? '拖拽调整顺序' : '无 id，暂不支持编辑'}
+                onMouseLeave={() => setOpenMenu(null)}
               >
                 <button
                   className={`box box-${t.state}`}
@@ -138,6 +157,41 @@ export default function App() {
                 {t.task && <span className="chip chip-task">+{t.task}</span>}
                 {t.date && <span className="chip chip-date">@{t.date}</span>}
                 {t.doneDate && <span className="chip chip-done">done {t.doneDate}</span>}
+
+                {t.id && (
+                  <div className="menu-wrap">
+                    <button
+                      className="menu-trigger"
+                      aria-label="迁移"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setOpenMenu(openMenu === t.id ? null : t.id)
+                      }}
+                    >
+                      ⋯
+                    </button>
+                    {openMenu === t.id && (
+                      <div className="menu">
+                        <button onClick={() => migrate(t, 'today')}>迁移到今天</button>
+                        <button
+                          onClick={() => setPickingDate(pickingDate === t.id ? null : t.id)}
+                        >
+                          迁移到以后…
+                        </button>
+                        {pickingDate === t.id && (
+                          <input
+                            type="date"
+                            className="menu-date"
+                            min={today()}
+                            onChange={(e) => {
+                              if (e.target.value) migrate(t, 'later', e.target.value)
+                            }}
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </li>
             ))}
           </ul>

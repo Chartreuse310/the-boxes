@@ -53,12 +53,18 @@ export async function ensureIds(dataDir: string, date: string): Promise<void> {
   if (dirty) await writeFile(file, lines.join('\n'))
 }
 
-/** 修改某 id 的行状态；done 时写入 @done:今天，其余状态移除 @done 前缀 */
+/**
+ * 修改某 id 的行状态。
+ * - done：写 @done:今天；清除普通 @日期（完成即不再迁移）
+ * - 迁移（deferred=[>] 今天 / scheduled=[<] 所选日）：清除旧 @日期，写 @migrateDate
+ * - 三态中的 todo/doing：清除 @done 与 @日期（回到待处理）
+ */
 export async function setState(
   dataDir: string,
   date: string,
   id: string,
   state: TodoState,
+  migrateDate?: string,
 ): Promise<void> {
   const file = inboxPath(dataDir, date)
   const content = await readFile(file, 'utf8')
@@ -71,14 +77,18 @@ export async function setState(
     if (!idM || idM[2] !== id) continue
     // 替换状态符号：- [ ] → - [x]
     lines[i] = raw.replace(/^(-\s\[)([ x/<>])(\])/, (_, p1, _p2, p3) => p1 + ch + p3)
+    // 去掉已完成标记
+    lines[i] = lines[i].replace(/\s@done:\d{4}-\d{2}-\d{2}/g, '')
+
     if (state === 'done') {
-      // 追加 @done:今天；避免重复
-      if (!/@done:\d{4}-\d{2}-\d{2}/.test(lines[i])) {
-        lines[i] = raw.trimEnd() + ` @done:${localDate()}`
-      }
+      // 完成：清旧 @日期，写 @done:今天
+      lines[i] = lines[i].replace(/\s@\d{4}-\d{2}-\d{2}/g, '').trimEnd() + ` @done:${localDate()}`
+    } else if (migrateDate) {
+      // 迁移：清旧 @日期，写 @目标日
+      lines[i] = lines[i].replace(/\s@\d{4}-\d{2}-\d{2}/g, '').trimEnd() + ` @${migrateDate}`
     } else {
-      // 其他状态：去掉 @done:日期（回到未完成语义）
-      lines[i] = lines[i].replace(/\s@done:\d{4}-\d{2}-\d{2}/g, '')
+      // 三态非 done：清 @日期（回到待处理，无目标日）
+      lines[i] = lines[i].replace(/\s@\d{4}-\d{2}-\d{2}/g, '')
     }
     await writeFile(file, lines.join('\n'))
     return

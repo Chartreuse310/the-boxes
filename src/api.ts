@@ -13,8 +13,8 @@ export interface BoxesApi {
   getDay(date: string): Promise<RawDay | null>
   /** 确保某日文件存在（无则创建空文件）并补齐缺失 id；返回最新原文 */
   ensureIds(date: string): Promise<string>
-  /** 修改某 todo 状态 */
-  setState(date: string, id: string, state: string): Promise<void>
+  /** 修改某 todo 状态；migrateDate 用于迁移 [>]今天/[<]所选日 */
+  setState(date: string, id: string, state: string, migrateDate?: string): Promise<void>
   /** 按给定 id 顺序重排该日 todo */
   reorder(date: string, order: string[]): Promise<void>
 }
@@ -35,11 +35,11 @@ const httpApi: BoxesApi = {
     if (!r.ok) throw new Error(`ensureIds 失败：${r.status} ${await r.text()}`)
     return (await r.json()).content
   },
-  setState: async (date, id, state) => {
+  setState: async (date, id, state, migrateDate) => {
     const r = await fetch(`/api/days/${date}/todos/${id}/state`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ state }),
+      body: JSON.stringify({ state, migrateDate }),
     })
     if (!r.ok) throw new Error(`setState 失败：${r.status} ${await r.text()}`)
   },

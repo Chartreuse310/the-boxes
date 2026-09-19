@@ -118,7 +118,7 @@ function boxesApi(dataDir: string): Plugin {
           return
         }
 
-        // PUT /api/days/:date/todos/:id/state : 修改某 todo 状态
+        // PUT /api/days/:date/todos/:id/state : 修改某 todo 状态（可选迁移日期）
         const ms = pathname.match(/^\/days\/(\d{4}-\d{2}-\d{2})\/todos\/([a-z0-9]+)\/state$/)
         if (req.method === 'PUT' && ms) {
           handle(async () => {
@@ -126,7 +126,8 @@ function boxesApi(dataDir: string): Plugin {
             const state = String(body.state ?? '')
             const allowed = ['todo', 'doing', 'done', 'deferred', 'scheduled']
             if (!allowed.includes(state)) throw new Error(`非法状态：${state}`)
-            await setState(dataDir, ms[1], ms[2], state as TodoState)
+            const migrateDate = typeof body.migrateDate === 'string' ? body.migrateDate : undefined
+            await setState(dataDir, ms[1], ms[2], state as TodoState, migrateDate)
             return { ok: true }
           })
           return

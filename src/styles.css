@@ -100,6 +100,71 @@ select {
   cursor: grabbing;
 }
 
+/* 悬停迁移菜单 */
+.menu-wrap {
+  flex: none;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.menu-trigger {
+  border: none;
+  background: none;
+  color: #a8a29e;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s;
+}
+.todo:hover .menu-trigger {
+  opacity: 1;
+}
+.menu-trigger:hover {
+  background: #f0efed;
+  color: #57534e;
+}
+.menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  background: #fff;
+  border: 1px solid #e5e2df;
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(28, 25, 23, 0.12);
+  padding: 4px;
+  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+}
+.menu button {
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  border-radius: 7px;
+  cursor: pointer;
+  color: #1c1917;
+}
+.menu button:hover {
+  background: #f5f5f4;
+}
+.menu-date {
+  margin-top: 2px;
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 8px;
+  border: 1px solid #ddd9d5;
+  border-radius: 7px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .todo-done .text {
   text-decoration: line-through;
   color: #a8a29e;
