@@ -22,10 +22,14 @@ function inboxPath(dataDir: string, date: string): string {
   return path.join(dataDir, 'inbox', `${date}.md`)
 }
 
-/** 任务文件的绝对路径。slug 只许字母/数字/中文/下划线/连字符（防路径穿越）。 */
-export function taskPath(dataDir: string, slug: string): string {
+/**
+ * 任务文件的绝对路径。任务按提出月份嵌套（SPEC v2.2：tasks/YYYY-MM/<slug>.md，防重名）。
+ * month 须为 YYYY-MM；slug 只许字母/数字/中文/下划线/连字符（防路径穿越）。
+ */
+export function taskPath(dataDir: string, month: string, slug: string): string {
+  if (!/^\d{4}-\d{2}$/.test(month)) throw new Error(`非法任务月份：${month}`)
   if (!/^[\p{L}\p{N}_-]+$/u.test(slug)) throw new Error(`非法任务名：${slug}`)
-  return path.join(dataDir, 'tasks', `${slug}.md`)
+  return path.join(dataDir, 'tasks', month, `${slug}.md`)
 }
 
 /** 给无 id 的 todo 行补齐 `^xxxx`，写回文件（inbox 日文件与任务文件通用） */

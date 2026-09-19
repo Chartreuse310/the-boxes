@@ -22,22 +22,25 @@ export interface BoxesInfo {
 
 /** 任务卡片的摘要信息（GET /api/tasks） */
 export interface TaskSummary {
+  /** 提出月份（YYYY-MM），任务文件所在的 tasks/ 子目录名 */
+  month: string
   slug: string
   title: string
   goal: string | null
   status: string | null
   created: string | null
-  total: number
-  done: number
 }
 
 export interface RawTask {
+  month: string
   slug: string
   content: string
 }
 
-/** todo 的来源文件：day = inbox 日期文件，task = 任务文件 */
-export type TodoSource = { kind: 'day'; date: string } | { kind: 'task'; slug: string }
+/** todo 的来源文件：day = inbox 日期文件，task = 任务文件（month 目录 + slug 文件名） */
+export type TodoSource =
+  | { kind: 'day'; date: string }
+  | { kind: 'task'; month: string; slug: string }
 
 /** 平铺视图的 todo：解析结果 + 来源（点击/迁移按来源分叉调接口） */
 export interface SourcedTodo extends Todo {
@@ -62,13 +65,13 @@ export interface BoxesApi {
   /** 任务列表（卡片用摘要），按提出日期倒序 */
   listTasks(): Promise<TaskSummary[]>
   /** 读取某任务文件原文；文件不存在返回 null */
-  getTask(slug: string): Promise<RawTask | null>
+  getTask(month: string, slug: string): Promise<RawTask | null>
   /** 补齐任务文件缺失 id，返回最新原文 */
-  taskEnsureIds(slug: string): Promise<string>
+  taskEnsureIds(month: string, slug: string): Promise<string>
   /** 修改任务内某 todo 状态（三态） */
-  taskSetState(slug: string, id: string, state: string): Promise<void>
+  taskSetState(month: string, slug: string, id: string, state: string): Promise<void>
   /** 按给定 id 顺序重排任务内 todo */
-  taskReorder(slug: string, order: string[]): Promise<void>
+  taskReorder(month: string, slug: string, order: string[]): Promise<void>
   /** 平铺视图：全部 todo（inbox 日期倒序在前，任务按提出日倒序在后），各附来源 */
   listAll(): Promise<SourcedTodo[]>
 }
@@ -123,26 +126,28 @@ const httpApi: BoxesApi = {
     if (!r.ok) throw new Error(`listTasks 失败：${r.status}`)
     return r.json()
   },
-  getTask: async (slug) => {
-    const r = await fetch(`/api/tasks/${encodeURIComponent(slug)}`)
+  getTask: async (month, slug) => {
+    const r = await fetch(`/api/tasks/${month}/${encodeURIComponent(slug)}`)
     if (!r.ok) return null
     return r.json()
   },
-  taskEnsureIds: async (slug) => {
-    const r = await fetch(`/api/tasks/${encodeURIComponent(slug)}/ensure-ids`, { method: 'PUT' })
+  taskEnsureIds: async (month, slug) => {
+    const r = await fetch(`/api/tasks/${month}/${encodeURIComponent(slug)}/ensure-ids`, {
+      method: 'PUT',
+    })
     if (!r.ok) throw new Error(`taskEnsureIds 失败：${r.status} ${await r.text()}`)
     return (await r.json()).content
   },
-  taskSetState: async (slug, id, state) => {
-    const r = await fetch(`/api/tasks/${encodeURIComponent(slug)}/todos/${id}/state`, {
+  taskSetState: async (month, slug, id, state) => {
+    const r = await fetch(`/api/tasks/${month}/${encodeURIComponent(slug)}/todos/${id}/state`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ state }),
     })
     if (!r.ok) throw new Error(`taskSetState 失败：${r.status} ${await r.text()}`)
   },
-  taskReorder: async (slug, order) => {
-    const r = await fetch(`/api/tasks/${encodeURIComponent(slug)}/reorder`, {
+  taskReorder: async (month, slug, order) => {
+    const r = await fetch(`/api/tasks/${month}/${encodeURIComponent(slug)}/reorder`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ order }),

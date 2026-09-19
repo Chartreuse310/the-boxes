@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.9（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.10（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -309,14 +309,27 @@ h1 {
 .task-card.is-selected {
   background: var(--bg-sunken);
 }
+.task-top {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
 .task-name {
-  display: block;
+  min-width: 0; /* 允许收缩给 ellipsis；月份紧跟其后不被挤掉 */
   font-size: var(--fs-label);
   font-weight: 500;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* 提出月份（任务所在的 tasks/YYYY-MM 目录名）：较淡，区分跨月重名任务 */
+.task-month {
+  flex: none;
+  font-size: var(--fs-meta);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 .task-goal {
   display: block;
@@ -353,7 +366,26 @@ h1 {
   box-shadow: 0 0 0 3px var(--accent-focus);
 }
 
-/* ---------- 任务详情头（任务视图顶部，day 视图不渲染） ---------- */
+/* ---------- 平铺分组：组头 = 来源文件名称 ---------- */
+/* inbox 组头是日期（文件名），任务组头是任务名 + 较淡的提出月份 */
+.todo-group {
+  margin-top: 24px; /* §4：分组之间 24px 以上，用留白而非分割线 */
+}
+.todo-group:first-child {
+  margin-top: 0;
+}
+.group-title {
+  margin: 0 0 4px;
+  font-size: var(--fs-meta);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.group-month {
+  margin-left: 6px;
+  font-weight: 400;
+}
+
+/* ---------- 任务详情头（任务视图渲染，位于主区标题之下） ---------- */
 .task-header {
   margin: 0 0 16px;
 }

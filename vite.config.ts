@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { readdir, readFile } from 'node:fs/promises'
+import type { Dirent } from 'node:fs'
 import path from 'node:path'
 import {
   ensureIdsInFile,
@@ -21,6 +22,37 @@ async function dayExistsFor(dataDir: string, date: string): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+/**
+ * 掃描 tasks/YYYY-MM/ 下全部任務文件（SPEC v2.2：任務按提出月份嵌套，防重名）。
+ * 只認 YYYY-MM 形態的子目錄，其餘原樣跳過（容錯：不算錯誤）。
+ * 排序：提出日期新的在前；缺日期的按文件名排最後。
+ */
+async function readAllTasks(
+  dataDir: string,
+): Promise<{ month: string; slug: string; meta: ReturnType<typeof parseTask> }[]> {
+  const out: { month: string; slug: string; meta: ReturnType<typeof parseTask> }[] = []
+  let months: Dirent[]
+  try {
+    months = await readdir(path.join(dataDir, 'tasks'), { withFileTypes: true })
+  } catch {
+    return out // tasks/ 不存在 = 暫無任務
+  }
+  for (const d of months) {
+    if (!d.isDirectory() || !/^\d{4}-\d{2}$/.test(d.name)) continue
+    const files = await readdir(path.join(dataDir, 'tasks', d.name))
+    for (const f of files.filter((x) => x.endsWith('.md'))) {
+      const slug = f.replace(/\.md$/, '')
+      const meta = parseTask(await readFile(path.join(dataDir, 'tasks', d.name, f), 'utf8'))
+      out.push({ month: d.name, slug, meta })
+    }
+  }
+  out.sort(
+    (a, b) =>
+      (b.meta.created ?? '').localeCompare(a.meta.created ?? '') || a.slug.localeCompare(b.slug),
+  )
+  return out
 }
 
 /**
@@ -198,8 +230,9 @@ function boxesApi(dataDir: string): Plugin {
         }
 
         // —— 全部平铺（默认视图）——
-        // GET /api/all : 所有文件的 todo，各附来源（day:date / task:slug）。
+        // GET /api/all : 所有文件的 todo，各附来源（day:date / task:month+slug）。
         // 顺序：inbox 日期倒序在前（最新一天最先），任务按提出日倒序在后。
+        // 前端按来源分组渲染，组头直接显示来源文件名称。
         if (req.method === 'GET' && /^\/all\/?$/.test(pathname)) {
           handle(async () => {
             const out: Record<string, unknown>[] = []
@@ -215,105 +248,74 @@ function boxesApi(dataDir: string): Plugin {
               const todos = parseInbox(await readFile(path.join(dataDir, 'inbox', f), 'utf8'))
               for (const t of todos) out.push({ ...t, source: { kind: 'day', date } })
             }
-            let taskFiles: string[] = []
-            try {
-              taskFiles = await readdir(path.join(dataDir, 'tasks'))
-            } catch {
-              /* tasks/ 不存在 = 暂无任务 */
-            }
-            const tasks = await Promise.all(
-              taskFiles
-                .filter((f) => f.endsWith('.md'))
-                .map(async (f) => {
-                  const slug = f.replace(/\.md$/, '')
-                  const meta = parseTask(await readFile(path.join(dataDir, 'tasks', f), 'utf8'))
-                  return { slug, created: meta.created, todos: meta.todos }
-                }),
-            )
-            tasks.sort((a, b) => (b.created ?? '').localeCompare(a.created ?? '') || a.slug.localeCompare(b.slug))
-            for (const tk of tasks) {
-              for (const t of tk.todos) out.push({ ...t, source: { kind: 'task', slug: tk.slug } })
+            for (const tk of await readAllTasks(dataDir)) {
+              for (const t of tk.meta.todos) {
+                out.push({ ...t, source: { kind: 'task', month: tk.month, slug: tk.slug } })
+              }
             }
             return { todos: out }
           })
           return
         }
 
-        // —— 任务（tasks/ 目录，SPEC §5）——
-        // GET /api/tasks : 任务列表（卡片用：名称 + 一句话简介 + 进度）
+        // —— 任务（tasks/YYYY-MM/ 目录，SPEC §5）——
+        // GET /api/tasks : 任务列表（卡片用：名称 + 月份 + 一句话简介）
         if (req.method === 'GET' && /^\/tasks\/?$/.test(pathname)) {
           handle(async () => {
-            let files: string[]
-            try {
-              files = await readdir(path.join(dataDir, 'tasks'))
-            } catch {
-              return [] // tasks/ 不存在 = 暂无任务
-            }
-            const tasks = await Promise.all(
-              files
-                .filter((f) => f.endsWith('.md'))
-                .map(async (f) => {
-                  const slug = f.replace(/\.md$/, '')
-                  const meta = parseTask(await readFile(path.join(dataDir, 'tasks', f), 'utf8'))
-                  return {
-                    slug,
-                    title: meta.title ?? slug,
-                    goal: meta.goal,
-                    status: meta.status,
-                    created: meta.created,
-                    total: meta.todos.length,
-                    done: meta.todos.filter((t) => t.state === 'done').length,
-                  }
-                }),
-            )
-            // 提出日期新的在前；缺日期的按文件名排最后
-            tasks.sort((a, b) => (b.created ?? '').localeCompare(a.created ?? '') || a.slug.localeCompare(b.slug))
-            return tasks
+            const list = await readAllTasks(dataDir)
+            return list.map(({ month, slug, meta }) => ({
+              month,
+              slug,
+              title: meta.title ?? slug,
+              goal: meta.goal,
+              status: meta.status,
+              created: meta.created,
+            }))
           })
           return
         }
 
-        // GET /api/tasks/:slug : 任务文件原文
-        const tg = pathname.match(/^\/tasks\/([^/]+)$/)
+        // GET /api/tasks/:month/:slug : 任务文件原文
+        const tg = pathname.match(/^\/tasks\/(\d{4}-\d{2})\/([^/]+)$/)
         if (req.method === 'GET' && tg) {
-          readFile(taskPath(dataDir, tg[1]), 'utf8')
-            .then((content) => send(200, { slug: tg[1], content }))
+          readFile(taskPath(dataDir, tg[1], tg[2]), 'utf8')
+            .then((content) => send(200, { month: tg[1], slug: tg[2], content }))
             .catch(() => send(404, { error: 'not found' }))
           return
         }
 
-        // PUT /api/tasks/:slug/ensure-ids : 给缺失 id 的 todo 补 `^xxxx`
-        const te = pathname.match(/^\/tasks\/([^/]+)\/ensure-ids$/)
+        // PUT /api/tasks/:month/:slug/ensure-ids : 给缺失 id 的 todo 补 `^xxxx`
+        const te = pathname.match(/^\/tasks\/(\d{4}-\d{2})\/([^/]+)\/ensure-ids$/)
         if (req.method === 'PUT' && te) {
           handle(async () => {
-            const file = taskPath(dataDir, te[1])
+            const file = taskPath(dataDir, te[1], te[2])
             await ensureIdsInFile(file)
             return { content: await readFile(file, 'utf8') }
           })
           return
         }
 
-        // PUT /api/tasks/:slug/todos/:id/state : 修改任务内某 todo 状态（三态）
-        const ts = pathname.match(/^\/tasks\/([^/]+)\/todos\/([a-z0-9]+)\/state$/)
+        // PUT /api/tasks/:month/:slug/todos/:id/state : 修改任务内某 todo 状态（三态）
+        const ts = pathname.match(/^\/tasks\/(\d{4}-\d{2})\/([^/]+)\/todos\/([a-z0-9]+)\/state$/)
         if (req.method === 'PUT' && ts) {
           handle(async () => {
             const body = await readBody()
             const state = String(body.state ?? '')
             const allowed = ['todo', 'doing', 'done']
             if (!allowed.includes(state)) throw new Error(`非法状态：${state}`)
-            await setTodoStateInFile(taskPath(dataDir, ts[1]), ts[2], state as TodoState)
+            await setTodoStateInFile(taskPath(dataDir, ts[1], ts[2]), ts[3], state as TodoState)
             return { ok: true }
           })
           return
         }
 
-        // PUT /api/tasks/:slug/reorder : 按给定 id 顺序重排任务内 todo
-        const tr = pathname.match(/^\/tasks\/([^/]+)\/reorder$/)
+        // PUT /api/tasks/:month/:slug/reorder : 按给定 id 顺序重排任务内 todo
+        const tr = pathname.match(/^\/tasks\/(\d{4}-\d{2})\/([^/]+)\/reorder$/)
         if (req.method === 'PUT' && tr) {
           handle(async () => {
             const body = await readBody()
             const order = (body.order as string[]) ?? []
-            await reorderInFile(taskPath(dataDir, tr[1]), order)
+            await reorderInFile(taskPath(dataDir, tr[1], tr[2]), order)
             return { ok: true }
           })
           return

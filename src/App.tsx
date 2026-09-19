@@ -4,9 +4,12 @@ import { parseInbox, parseTask, type TaskMeta, type TodoState } from './lib/pars
 
 /**
  * 主视图：默认平铺（all），点日历某天 / 任务卡片进入筛选（day / task），
- * 点顶部「接下来干啥？」回到平铺。
+ * 点顶部「接下来干啥？」回到平铺。任务按提出月份嵌套在 tasks/YYYY-MM/ 下。
  */
-type View = { kind: 'all' } | { kind: 'day'; date: string } | { kind: 'task'; slug: string }
+type View =
+  | { kind: 'all' }
+  | { kind: 'day'; date: string }
+  | { kind: 'task'; month: string; slug: string }
 
 /** 本地时区的今日日期（YYYY-MM-DD） */
 function today(): string {
@@ -121,6 +124,31 @@ function DoingHalf() {
 
 /** 点击三态循环：只走到完成，停在 [x]，不回环 */
 const STATE_CYCLE: TodoState[] = ['todo', 'doing', 'done']
+
+/** 平铺视图的一组：来源相同的相邻行（/api/all 的排序已保证同文件行相邻） */
+interface TodoGroup {
+  key: string
+  /** 组头 = 来源文件名称：inbox → 日期，任务 → 任务名 */
+  title: string
+  /** 任务组附带的提出月份（较淡显示，区分跨月重名任务） */
+  month?: string
+  items: { t: SourcedTodo; i: number }[]
+}
+
+/** 把平铺的 todos 按来源文件分组。行尾不再标来源——组头直接显示文件名称。 */
+function groupBySource(todos: SourcedTodo[]): TodoGroup[] {
+  const groups: TodoGroup[] = []
+  todos.forEach((t, i) => {
+    const key =
+      t.source.kind === 'day' ? `day:${t.source.date}` : `task:${t.source.month}/${t.source.slug}`
+    const title = t.source.kind === 'day' ? t.source.date : t.source.slug
+    const month = t.source.kind === 'task' ? t.source.month : undefined
+    const last = groups[groups.length - 1]
+    if (last && last.key === key) last.items.push({ t, i })
+    else groups.push({ key, title, month, items: [{ t, i }] })
+  })
+  return groups
+}
 
 /** 点击 box 会推进到的下一个状态；已到终态 [x] 时返回 null */
 function nextState(state: TodoState): TodoState | null {
@@ -267,8 +295,8 @@ export default function App() {
     setTodos(day ? parseInbox(day.content).map((t) => ({ ...t, source: { kind: 'day', date } })) : [])
   }
 
-  const loadTask = async (slug: string) => {
-    const raw = await api.getTask(slug)
+  const loadTask = async (month: string, slug: string) => {
+    const raw = await api.getTask(month, slug)
     if (!raw) {
       setTaskMeta(null)
       setTodos([])
@@ -276,7 +304,7 @@ export default function App() {
     }
     const parsed = parseTask(raw.content)
     setTaskMeta(parsed)
-    setTodos(parsed.todos.map((t) => ({ ...t, source: { kind: 'task', slug } })))
+    setTodos(parsed.todos.map((t) => ({ ...t, source: { kind: 'task', month, slug } })))
   }
 
   const loadAll = async () => {
@@ -290,7 +318,7 @@ export default function App() {
     if (view === null) return
     if (view.kind === 'all') loadAll()
     else if (view.kind === 'day') loadDay(view.date)
-    else loadTask(view.slug)
+    else loadTask(view.month, view.slug)
   }
 
   // 环境信息：与日期列表无关，只需一次
@@ -315,7 +343,7 @@ export default function App() {
     setTodos(null)
     if (view.kind === 'all') loadAll()
     else if (view.kind === 'day') loadDay(view.date)
-    else loadTask(view.slug)
+    else loadTask(view.month, view.slug)
   }, [view])
 
   // 点击 box：三态前进（todo→doing→done，done 停住）。
@@ -331,7 +359,7 @@ export default function App() {
       return copy
     })
     if (todo.source.kind === 'day') await api.setState(todo.source.date, todo.id, next)
-    else await api.taskSetState(todo.source.slug, todo.id, next)
+    else await api.taskSetState(todo.source.month, todo.source.slug, todo.id, next)
     if (todo.source.kind === 'task') api.listTasks().then(setTasks).catch(() => {})
     refreshView()
   }
@@ -363,7 +391,7 @@ export default function App() {
     setTodos(copy)
     const newOrder = copy.map((t) => t.id).filter(Boolean) as string[]
     if (view.kind === 'day') await api.reorder(view.date, newOrder)
-    else await api.taskReorder(view.slug, newOrder)
+    else await api.taskReorder(view.month, view.slug, newOrder)
   }
 
   // footer 说明：数据目录 + 版本，不带标签。两者都来自 /api/info，
@@ -382,6 +410,58 @@ export default function App() {
   // 原实现写死 ~/the-boxes，配过 .env 的用户会看到一条指向不存在文件的指引。
   const dataRoot = info ? shortDir(info.dataDir, info.home) : ''
   const inboxFile = `${dataRoot}/inbox/${view?.kind === 'day' ? view.date : '日期'}.md`
+
+  /** 单行 todo 的渲染（平铺分组与筛选视图共用；i 是 todos 的全局下标，重排靠它定位） */
+  const renderTodo = (t: SourcedTodo, i: number) => (
+    <li
+      key={t.id ?? i}
+      className={`todo todo-${t.state}`}
+      style={{ '--i': i } as import('react').CSSProperties}
+      draggable={!!t.id}
+      onDragStart={() => {
+        if (t.id) drag.current = { index: i, id: t.id, source: t.source }
+      }}
+      onDragEnd={() => {
+        drag.current = null
+      }}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={() => onDrop(i)}
+    >
+      <button
+        className={`box box-${t.state}`}
+        disabled={!t.id}
+        onClick={() => cycleState(t, i)}
+        aria-label={boxAriaLabel(t.state)}
+      >
+        <span className="box-sym" key={t.state}>
+          {t.state === 'done' ? (
+            <DoneCheck />
+          ) : t.state === 'doing' ? (
+            <DoingHalf />
+          ) : null}
+        </span>
+      </button>
+      <span className="text">
+        {t.text}
+        {/* 日期注记：沿用文件里的 ISO 日期（与 Markdown 原文对得上）和原始措辞。
+            这是 §5.1「界面不用 emoji / 不用破折号拼注记」的既定例外。 */}
+        {t.startDate && (
+          <span className="done-note">
+            {' '}
+            ——始于 {t.startDate} 🛫
+            {t.doneDate && <>，完成于 {t.doneDate} 🎉</>}
+          </span>
+        )}
+        {!t.startDate && t.doneDate && (
+          <span className="done-note"> ——完成于 {t.doneDate} 🎉</span>
+        )}
+      </span>
+      {/* 元数据保留文件里的完整值，便于与 inbox 原文对应（§5.1）：
+          日期用完整 ISO（那也是当日的文件名），任务统一用 @ 记号。 */}
+      {t.task && <span className="chip chip-task">@{t.task}</span>}
+      {t.date && <span className="chip chip-date">@{t.date}</span>}
+    </li>
+  )
 
   const todayStr = today()
 
@@ -408,25 +488,29 @@ export default function App() {
             onDropDate={migrateTo}
           />
 
-          {/* 任务卡片：名称 + 一句话简介（**目标**），点击查看任务 */}
+          {/* 任务卡片：名称 + 提出月份（较淡，区分跨月重名）+ 一句话简介（**目标**） */}
           {tasks.length > 0 && (
             <nav className="task-list" aria-label="任务列表">
               <div className="sidebar-heading">任务</div>
-              {tasks.map((t) => (
-                <button
-                  key={t.slug}
-                  type="button"
-                  className={
-                    'task-card' +
-                    (view?.kind === 'task' && view.slug === t.slug ? ' is-selected' : '')
-                  }
-                  aria-current={view?.kind === 'task' && view.slug === t.slug ? 'true' : undefined}
-                  onClick={() => setView({ kind: 'task', slug: t.slug })}
-                >
-                  <span className="task-name">{t.title}</span>
-                  {t.goal && <span className="task-goal">{t.goal}</span>}
-                </button>
-              ))}
+              {tasks.map((t) => {
+                const selected =
+                  view?.kind === 'task' && view.month === t.month && view.slug === t.slug
+                return (
+                  <button
+                    key={`${t.month}/${t.slug}`}
+                    type="button"
+                    className={'task-card' + (selected ? ' is-selected' : '')}
+                    aria-current={selected ? 'true' : undefined}
+                    onClick={() => setView({ kind: 'task', month: t.month, slug: t.slug })}
+                  >
+                    <span className="task-top">
+                      <span className="task-name">{t.title}</span>
+                      <span className="task-month">{t.month}</span>
+                    </span>
+                    {t.goal && <span className="task-goal">{t.goal}</span>}
+                  </button>
+                )
+              })}
             </nav>
           )}
         </aside>
@@ -478,68 +562,27 @@ export default function App() {
             <p className="muted empty">
               还没有任何 todo。
               <br />
-              在 <code>{dataRoot}/inbox/日期.md</code> 或 <code>{dataRoot}/tasks/任务.md</code> 里加一行，保存后刷新即可看到。
+              在 <code>{dataRoot}/inbox/日期.md</code> 或 <code>{dataRoot}/tasks/月份/任务.md</code>{' '}
+              里加一行，保存后刷新即可看到。
             </p>
           )
-        ) : (
-          <ul className="todos">
-            {todos.map((t, i) => (
-              <li
-                key={t.id ?? i}
-                className={`todo todo-${t.state}`}
-                style={{ '--i': i } as import('react').CSSProperties}
-                draggable={!!t.id}
-                onDragStart={() => {
-                  if (t.id) drag.current = { index: i, id: t.id, source: t.source }
-                }}
-                onDragEnd={() => {
-                  drag.current = null
-                }}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => onDrop(i)}
-              >
-                <button
-                  className={`box box-${t.state}`}
-                  disabled={!t.id}
-                  onClick={() => cycleState(t, i)}
-                  aria-label={boxAriaLabel(t.state)}
-                >
-                  <span className="box-sym" key={t.state}>
-                    {t.state === 'done' ? (
-                      <DoneCheck />
-                    ) : t.state === 'doing' ? (
-                      <DoingHalf />
-                    ) : null}
-                  </span>
-                </button>
-                <span className="text">
-                  {t.text}
-                  {/* 日期注记：沿用文件里的 ISO 日期（与 Markdown 原文对得上）和原始措辞。
-                      这是 §5.1「界面不用 emoji / 不用破折号拼注记」的既定例外。 */}
-                  {t.startDate && (
-                    <span className="done-note">
-                      {' '}
-                      ——始于 {t.startDate} 🛫
-                      {t.doneDate && <>，完成于 {t.doneDate} 🎉</>}
-                    </span>
-                  )}
-                  {!t.startDate && t.doneDate && (
-                    <span className="done-note"> ——完成于 {t.doneDate} 🎉</span>
-                  )}
-                </span>
-                {/* 元数据保留文件里的完整值，便于与 inbox 原文对应（§5.1）：
-                    日期用完整 ISO（那也是当日的文件名），任务统一用 @ 记号。 */}
-                {t.task && <span className="chip chip-task">@{t.task}</span>}
-                {t.date && <span className="chip chip-date">@{t.date}</span>}
-                {/* 平铺视图：行尾标来源文件（筛选视图不需要——筛选本身已指明文件） */}
-                {view?.kind === 'all' && (
-                  <span className="chip chip-source">
-                    {t.source.kind === 'day' ? `@${t.source.date}` : `@${t.source.slug}`}
-                  </span>
-                )}
-              </li>
+        ) : view?.kind === 'all' ? (
+          /* 平铺：按来源文件分组，组头直接显示文件名称（inbox → 日期；任务 → 任务名 +
+             提出月份），行尾不再标来源 */
+          <div className="todo-groups">
+            {groupBySource(todos).map((g) => (
+              <section key={g.key} className="todo-group">
+                <h3 className="group-title">
+                  {g.title}
+                  {g.month && <span className="group-month">{g.month}</span>}
+                </h3>
+                <ul className="todos">{g.items.map(({ t, i }) => renderTodo(t, i))}</ul>
+              </section>
             ))}
-          </ul>
+          </div>
+        ) : (
+          /* 筛选视图：单一来源，直接平铺（来源已由日历选中态 / 任务详情头标明） */
+          <ul className="todos">{todos.map((t, i) => renderTodo(t, i))}</ul>
         )}
         </main>
       </div>
