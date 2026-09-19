@@ -1,6 +1,6 @@
 # the-boxes · 界面风格规则（Style Guide）
 
-> 版本 v0.3.21 · 2026-09-20 · **本文是界面视觉的唯一事实源。**
+> 版本 v0.3.22 · 2026-09-20 · **本文是界面视觉的唯一事实源。**
 > `src/styles.css` 必须服从本文；两者不一致时，以本文为准，并视为待修复缺陷。
 > 视觉改动流程：先改本文 → 再改 `styles.css` → 在文末变更日志追加一条。
 
@@ -326,8 +326,8 @@
 
 - 触发：双击带 `^id` 的行（手写无 id 的行不可编辑，先由交互补 id）。`Esc` 或「取消」放弃；描述框 `⌘/Ctrl+Enter` 或「保存」提交（textarea 里 `Enter` = 换行，保存时后端把换行并成空格、todo 仍一行）；**保存失败留在编辑态**，不吞已输入内容。
 - **第一行 = 描述**：`.edit-area`——**多行文本框 `<textarea>`**，通栏宽，`--bg-surface` + `--border-control` + `--radius-control`，`focus-visible` 环同 §5.2；`min-height:2.6em`、可纵向 `resize`。占满整行。
-- **第二行 = 开始 / 完成 / 状态**：`.edit-row`（flex、可换行、gap 8×16px）。①「开始 / 完成」两个 `.edit-field`：`<input type=date>` + 有值时一枚 `×`（`.edit-clear`）清除；②**状态是只读展示 `.edit-status`**（盒图标 + 中文名，随起止时间派生，**不可点**）——有完成→完成、无完成有开始→进行中、皆空→待办。三态只有"完成"有色（§4.2）。改状态即改这两个日期，不单设可交互的状态控件。
-- **第三行 = 所在文件**：`.edit-field.edit-loc-field`（整行、输入框 `flex:1` 吃满）——**可输入的下拉单选**（`<input list>`+`<datalist>`）：选项列已有任务（value=slug，label=`月份 · 任务名`）+ 已有日期文件；值 = 当前所在文件的日期 / slug，**清空 = 掉到当日**、输入未知名 = 保存时**以该名新建任务**（当前月）、命中 slug/名或 ISO 日期则路由到该文件。保存目标即字段所指——与来源相同则原地保存，否则整行移动过去（id 保留、撞车换新）。
+- **第二行 = 开始 / 完成 / 状态**（**右对齐**）：`.edit-row`（flex、`justify-content:flex-end`、可换行、gap 8×16px）。①「开始 / 完成」两个 `.edit-field`：`<input type=date>` + 有值时一枚 `×`（`.edit-clear`）清除；②**状态是只读展示 `.edit-status`**（盒图标 + 中文名，随起止时间派生，**不可点**）——有完成→完成、无完成有开始→进行中、皆空→待办。三态只有"完成"有色（§4.2）。改状态即改这两个日期，不单设可交互的状态控件。
+- **第三行 = 所在文件**（**右对齐、框随内容宽度**）：`.edit-field.edit-loc-field`（`width:100%` 但 `justify-content:flex-end`；`.edit-loc` `field-sizing:content`、`min 8ch / max 26ch`，**不通栏**）——**可输入的下拉单选**（`<input list>`+`<datalist>`）：选项列已有任务（value=slug，label=`月份 · 任务名`）+ 已有日期文件；值 = 当前所在文件的日期 / slug，**清空 = 掉到当日**、输入未知名 = 保存时**以该名新建任务**（当前月）、命中 slug/名或 ISO 日期则路由到该文件。保存目标即字段所指——与来源相同则原地保存，否则整行移动过去（id 保留、撞车换新）。
 - **整行必须占满宽度**：编辑行 `.todo-editing` 要用 **`li.todo.todo-editing`** 抬特异度，压过定义更靠后的 `.todo`（`display:flex`）、`.todo + .todo::before`、`.todo:hover`——否则单类 `.todo-editing` 会失手、编辑内容缩成内容宽、右侧留一大块空白。落实：整行 `display:block`、`:hover` 无底色、去缩进分隔线。
 - **动作行 `.edit-actions`**（右对齐）：`.btn`（次级，`--text-secondary` 描边、悬停 `--bg-hover`）+ `.btn-primary`（`--accent` 描边+文本、悬停 `--accent-focus` 底，**不叠白字、不引新色值**）。
 - 控件配色全走 token：文本框 / 日期 / 所在文件 均 `--bg-surface` + `--border-control` + `--radius-control`，`:focus` 环同 §5.2。数据格式仍 SPEC §4/§5，`+任务`/`@日期` 不写。
@@ -386,6 +386,7 @@
 
 ## 变更日志
 
+- **2026-09-20 v0.3.22**：**编辑器第二/三行右对齐、所在文件框改随内容宽（改 §5.7）。** 修改建议：开始/完成/状态与所在文件都靠左、所在文件框通栏过大。实施方案：`.edit-row` 加 `justify-content:flex-end`；`.edit-loc-field` 由"输入框 flex:1 通栏"改 `justify-content:flex-end` + `.edit-loc` `field-sizing:content`（`min 8ch / max 26ch`、不通栏）。描述文本框仍通栏。`src/styles.css` 同步，文件头版本引用升至 v0.3.22。纯界面，数据格式无变化。
 - **2026-09-20 v0.3.21**：**编辑器占满宽度修复 + 状态改只读（改 §5.7）。** 修改建议：①编辑行右侧一大块留白——根因 `.todo-editing` 单类被更靠后的 `.todo{display:flex}` 盖掉，编辑内容缩成内容宽；②状态按钮不必可交互（日期才是入口）。实施方案：①`.todo-editing`→`li.todo.todo-editing`（含 `::before`/`:hover`）抬特异度强制 `display:block`、无 hover 底色、去缩进分隔线，编辑器随之占满；②`.status-btn`→静态 `.edit-status`（盒图标+中文名，随起止时间派生、不可点），删 cycleStatus。`src/styles.css` 同步，文件头版本引用升至 v0.3.21。纯界面，数据格式无变化。
 - **2026-09-20 v0.3.20**：**编辑器三行 + 状态循环按钮（改 §5.7）。** 修改建议：用户要 `【文本框】 / 开始 完成 ✅状态 / 所在文件` 三段；且要能在编辑器里直接切状态，而非只读派生。实施方案：①第一行 `.edit-area` textarea 不变；②第二行 `.edit-row` = 开始 + 完成 + **`.status-btn`**（盒图标+中文名，点按 待办→进行中→完成→待办 循环，底层只写开始/完成日期——进行中补今天、完成补今天保留开始、回待办清空，日期仍是唯一事实源）；③第三行 `.edit-loc-field` 所在文件独占整行（输入框 flex:1）；④操作行去掉只读盒子/提示、按钮右对齐；删 `.edit-state`/`.edit-hint`、`.edit-loc` 固定宽度。`src/styles.css` 加 `.status-btn`/`.edit-loc-field`，文件头版本引用升至 v0.3.20。纯界面，数据格式无变化。
 - **2026-09-20 v0.3.19**：**编辑器改两行布局——描述通栏多行文本框（第一行）、所在文件+开始+完成并排（第二行）（改 §5.7）。** 修改建议：上一版把状态盒+描述+所在文件挤在一行、时间又占一行，描述只能单行不便改长文；用户要"描述是一个文本框、所在文件/开始/结束放第二行"。实施方案：①第一行 `.edit-area` 用 `<textarea>`（通栏、surface+border-control、可纵向 resize、`min-height:2.6em`），Enter 换行 / ⌘Ctrl+Enter 保存（换行保存时后端并成空格、todo 仍一行）；②第二行 `.edit-row`：`.edit-field`×3 = 所在文件（`<input list>`+`<datalist>`，`width:14em`）/ 开始 / 完成；`.edit-field input` 统一控件样式；③派生态盒子从描述行移到 `.edit-actions` 左端 `.edit-state`；删 `.edit-main`/`.edit-desc`/`.edit-fields`。`src/styles.css` 同步，文件头版本引用升至 v0.3.19。纯界面/交互，数据格式无变化。

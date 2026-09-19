@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.21（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.22（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -587,11 +587,12 @@ li.todo.todo-editing:hover {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-focus);
 }
-/* 第二行：开始 / 完成 / 状态 并排（可换行） */
+/* 第二行：开始 / 完成 / 状态 —— 右对齐（可换行） */
 .edit-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px 16px;
 }
 /* 派生态预览：静态标记，去掉按钮态的悬停缩放（底色沿用各态自身） */
@@ -659,14 +660,17 @@ li.todo.todo-editing:hover {
   font-size: var(--fs-label);
   color: var(--text-secondary);
 }
-/* 所在文件独占一行：输入框吃满剩余宽度 */
+/* 第三行：所在文件 —— 右对齐、输入框随内容宽度（不通栏） */
 .edit-loc-field {
   width: 100%;
+  justify-content: flex-end;
 }
 .edit-loc-field .edit-loc {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   width: auto;
-  min-width: 0;
+  min-width: 8ch;
+  max-width: 26ch;
+  field-sizing: content; /* 支持时按内容自适应；不支持则退到默认适中宽度 */
 }
 .edit-btns {
   display: flex;
