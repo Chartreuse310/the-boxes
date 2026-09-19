@@ -100,29 +100,51 @@ export default function App() {
     if (newOrder) await api.reorder(selected, newOrder)
   }
 
+  const doneCount = todos?.filter((t) => t.state === 'done').length ?? 0
+  const totalCount = todos?.length ?? 0
+  const donePct = totalCount ? Math.round((doneCount / totalCount) * 100) : 0
+
   return (
     <div className="app">
       <header>
-        <h1>
-          <span className="logo" aria-hidden />
-          the-boxes
-        </h1>
+        <div className="brand">
+          <span className="logo" aria-hidden>
+            <i className="lld" />
+            <i className="lbl" />
+            <i className="ltb" />
+          </span>
+          <h1>the-boxes</h1>
+        </div>
         <div className="date-picker">
           {selected === today() && <span className="today-badge">今日</span>}
-          <select
-            value={selected ?? ''}
-            onChange={(e) => setSelected(e.target.value || null)}
-            disabled={days.length === 0}
-          >
-            {days.length === 0 && <option value="">暂无记录</option>}
-            {days.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
+          <div className="select-wrap">
+            <select
+              value={selected ?? ''}
+              onChange={(e) => setSelected(e.target.value || null)}
+              disabled={days.length === 0}
+              aria-label="选择日期"
+            >
+              {days.length === 0 && <option value="">暂无记录</option>}
+              {days.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </header>
+
+      {todos && todos.length > 0 && (
+        <div className="day-status" role="progressbar" aria-valuenow={donePct} aria-label={`${doneCount}/${totalCount} 完成`}>
+          <span className="day-status-label">
+            {doneCount}/{totalCount} 完成
+          </span>
+          <div className="bar">
+            <span className="bar-fill" style={{ width: `${donePct}%` }} />
+          </div>
+        </div>
+      )}
 
       <main>
         {todos === null ? (
@@ -139,6 +161,7 @@ export default function App() {
               <li
                 key={t.id ?? i}
                 className={`todo todo-${t.state}`}
+                style={{ '--i': i } as import('react').CSSProperties}
                 draggable={!!t.id}
                 onDragStart={() => (dragIndex.current = i)}
                 onDragOver={(e) => e.preventDefault()}
@@ -150,8 +173,11 @@ export default function App() {
                   className={`box box-${t.state}`}
                   disabled={!t.id}
                   onClick={() => cycleState(t, i)}
+                  aria-label={`状态：${t.state}`}
                 >
-                  {STATE_SYMBOL[t.state]}
+                  <span className="box-sym" key={t.state}>
+                    {STATE_SYMBOL[t.state]}
+                  </span>
                 </button>
                 <span className="text">
                   {t.text}
