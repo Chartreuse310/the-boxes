@@ -1,5 +1,35 @@
+# 依赖
 node_modules/
+pnpm-debug.log*
+
+# 构建产物
 dist/
-.DS_Store
-*.local
+dist-electron/
+out/
+
+# 环境变量（含本地数据目录覆盖）
 .env
+.env.*
+!.env.example
+*.local
+
+# 日志
+npm-debug.log*
+yarn-error.log*
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# IDE / 编辑器
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# 测试/覆盖率
+coverage/
+
+# 临时
+*.tmp
+*.temp
