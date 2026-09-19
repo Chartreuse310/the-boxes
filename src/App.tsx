@@ -3,8 +3,9 @@ import { api, type BoxesInfo, type SourcedTodo, type TaskSummary } from './api'
 import { parseInbox, parseTask, type TaskMeta, type TodoState } from './lib/parser'
 
 /**
- * 主视图：默认平铺（all），点日历某天 / 任务卡片进入筛选（day / task），
- * 点顶部「接下来干啥？」回到平铺。任务按提出月份嵌套在 tasks/YYYY-MM/ 下。
+ * 主视图：默认平铺（all），点日历某天 / 任务卡片进入筛选（day / task）。
+ * 取消筛选回平铺：点右上角 home 图标，或再按一次已选中的日期 / 任务卡片。
+ * 任务按提出月份嵌套在 tasks/YYYY-MM/ 下。
  */
 type View =
   | { kind: 'all' }
@@ -118,6 +119,35 @@ function DoingHalf() {
       focusable="false"
     >
       <path d={HALF_ARC} fill="currentColor" />
+    </svg>
+  )
+}
+
+/**
+ * home 图标：回到平铺视图（默认视图）。
+ * 矢量绘制——§5.1 禁止 emoji 作界面元素；房子轮廓 + 门柱，
+ * stroke 2 / viewBox 24，由 CSS 显示为 18px（描边实际渲染 1.5px，
+ * 与状态框外圈同粗）。颜色走 currentColor = 按钮的 --text-secondary。
+ */
+function HomeIcon() {
+  return (
+    <svg className="home-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <polyline
+        points="9 22 9 12 15 12 15 22"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   )
 }
@@ -476,6 +506,20 @@ export default function App() {
           </span>
           <h1>the-boxes</h1>
         </div>
+        {/* home：回到平铺（默认视图）。取代原主区文字按钮「接下来干啥？」——
+            平铺不需要自报家门，返回入口收到页面右上角 */}
+        <button
+          type="button"
+          className="home-btn"
+          onClick={() => {
+            if (view?.kind !== 'all') setView({ kind: 'all' })
+          }}
+          aria-label="回到平铺"
+          title="回到平铺"
+          aria-current={view?.kind === 'all' ? 'true' : undefined}
+        >
+          <HomeIcon />
+        </button>
       </header>
 
       <div className="layout">
@@ -484,7 +528,10 @@ export default function App() {
             marked={new Set(days)}
             selected={view?.kind === 'day' ? view.date : null}
             todayIso={todayStr}
-            onPick={(date) => setView({ kind: 'day', date })}
+            onPick={(date) =>
+              // 再按一次已选中的那天 = 取消筛选，回平铺
+              setView(view?.kind === 'day' && view.date === date ? { kind: 'all' } : { kind: 'day', date })
+            }
             onDropDate={migrateTo}
           />
 
@@ -501,7 +548,10 @@ export default function App() {
                     type="button"
                     className={'task-card' + (selected ? ' is-selected' : '')}
                     aria-current={selected ? 'true' : undefined}
-                    onClick={() => setView({ kind: 'task', month: t.month, slug: t.slug })}
+                    onClick={() =>
+                      // 再按一次已选中的卡片 = 取消筛选，回平铺
+                      setView(selected ? { kind: 'all' } : { kind: 'task', month: t.month, slug: t.slug })
+                    }
                   >
                     <span className="task-top">
                       <span className="task-name">{t.title}</span>
@@ -516,20 +566,7 @@ export default function App() {
         </aside>
 
         <main>
-        {/* 顶部标题：点击回到平铺（all 时已在平铺，点击无变化） */}
-        {view && (
-          <button
-            type="button"
-            className="feed-title"
-            onClick={() => {
-              if (view.kind !== 'all') setView({ kind: 'all' })
-            }}
-            aria-current={view.kind === 'all' ? 'true' : undefined}
-          >
-            接下来干啥？
-          </button>
-        )}
-        {/* 任务详情头：名称 + 目标 + 状态行 */}
+        {/* 任务详情头：名称 + 目标 + 状态行（v0.3.11 起为主区第一个元素） */}
         {view?.kind === 'task' && taskMeta && (
           <div className="task-header">
             <h2 className="task-title">{taskMeta.title ?? view.slug}</h2>

@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.10（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.11（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -132,6 +132,34 @@ h1 {
 }
 .logo .ltb {
   grid-area: 2 / 2;
+}
+
+/* home 图标按钮（header 右端，页面右上角）：点击回到平铺视图（默认视图）。
+   图标为矢量 SVG（§5.1 禁 emoji 作界面元素）：18px、stroke 2 / viewBox 24，
+   描边实际渲染 1.5px，与状态框外圈同粗 */
+.home-btn {
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+}
+.home-btn:hover {
+  background: var(--bg-hover);
+}
+.home-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-focus);
+}
+.home-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
 }
 
 /* ---------- 布局：左侧 mini 日历 + 任务卡片，右侧 todo 列表 ---------- */
@@ -340,32 +368,6 @@ h1 {
   white-space: nowrap;
 }
 
-/* ---------- 顶部标题「接下来干啥？」 ---------- */
-/* 点击回到平铺（all 时已在平铺，点击无变化）。负 margin 抵消按钮自身的
-   左 padding，让文字与列表左缘对齐 */
-.feed-title {
-  display: block;
-  border: none;
-  background: none;
-  font: inherit;
-  font-size: var(--fs-title);
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--text);
-  cursor: pointer;
-  padding: 4px 8px;
-  margin: 0 0 16px -8px;
-  border-radius: var(--radius-control);
-  transition: background var(--dur-fast) var(--ease);
-}
-.feed-title:hover {
-  background: var(--bg-hover);
-}
-.feed-title:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--accent-focus);
-}
-
 /* ---------- 平铺分组：组头 = 来源文件名称 ---------- */
 /* inbox 组头是日期（文件名），任务组头是任务名 + 较淡的提出月份 */
 .todo-group {
@@ -385,7 +387,7 @@ h1 {
   font-weight: 400;
 }
 
-/* ---------- 任务详情头（任务视图渲染，位于主区标题之下） ---------- */
+/* ---------- 任务详情头（任务视图渲染，v0.3.11 起为主区第一个元素） ---------- */
 .task-header {
   margin: 0 0 16px;
 }
