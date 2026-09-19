@@ -233,6 +233,13 @@ function groupBySource(todos: SourcedTodo[]): TodoGroup[] {
   return groups
 }
 
+/** 两个来源是否同一文件（重排只在同文件内落子）。 */
+function sameSource(a: TodoSource, b: TodoSource): boolean {
+  if (a.kind !== b.kind) return false
+  if (a.kind === 'day') return b.kind === 'day' && a.date === b.date
+  return b.kind === 'task' && a.month === b.month && a.slug === b.slug
+}
+
 /** 点击 box 会推进到的下一个状态；已到终态 [x] 时返回 null */
 function nextState(state: TodoState): TodoState | null {
   const i = STATE_CYCLE.indexOf(state)
@@ -620,22 +627,26 @@ export default function App() {
     refreshView()
   }
 
-  // 拖动重排：drop 时按新 id 顺序提交（day 与 task 筛选视图共用，接口分叉）。
-  // 平铺视图不重排——行来自不同文件，顺序没有全序意义（迁移走日历）。
-  // 新顺序从当前 todos 直接算，不经 setTodos 的 updater 收集——
-  // React 18 批处理下 updater 是 re-render 时才执行的，同步代码读不到它赋的值。
+  // 拖动重排：只在同一来源文件内落子——单文件视图=整列表，平铺视图=该组内；跨来源的落点忽略
+  // （平铺按来源分组，组间无全序意义，迁移走日历）。新顺序直接从当前 todos 的该来源子序列算，
+  // 不经 setTodos 的 updater（React 18 批处理下同步代码读不到它赋的值）。
   const onDrop = async (targetIndex: number) => {
     const from = drag.current
     drag.current = null
-    if (!from || from.index === targetIndex || view === null || !todos) return
-    if (view.kind === 'all') return
-    const copy = [...todos]
-    const [moved] = copy.splice(from.index, 1)
-    copy.splice(targetIndex, 0, moved)
-    setTodos(copy)
-    const newOrder = copy.map((t) => t.id).filter(Boolean) as string[]
-    if (view.kind === 'day') await api.reorder(view.date, newOrder)
-    else await api.taskReorder(view.month, view.slug, newOrder)
+    if (!from || !todos) return
+    const moved = todos[from.index]
+    const target = todos[targetIndex]
+    if (!moved?.id || !target || from.index === targetIndex || !sameSource(moved.source, target.source)) return
+    const idxs = todos.map((_, i) => i).filter((i) => sameSource(todos[i].source, moved.source))
+    const ids = idxs.map((i) => todos[i].id).filter(Boolean) as string[]
+    const pos = idxs.indexOf(from.index)
+    const dest = idxs.indexOf(targetIndex)
+    if (pos === -1 || dest === -1 || pos === dest) return
+    const [mv] = ids.splice(pos, 1)
+    ids.splice(dest, 0, mv)
+    if (moved.source.kind === 'day') await api.reorder(moved.source.date, ids)
+    else await api.taskReorder(moved.source.month, moved.source.slug, ids)
+    refreshView() // 落盘后按文件顺序重取，界面即所见即所得（平铺组序、单文件同理）
   }
 
   // —— 添加框：`@` 路由到某个文件（归属 = 所在文件），回车整行落盘 ——
