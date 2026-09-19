@@ -63,14 +63,14 @@
 |---|---|---|---|
 | `--c-done` | `#4f7a33` | **表达"完成"**（状态框填充、完成度进度条） | 作图形 ≥3:1：page 4.74 / sunken 4.16 ✅ |
 | `--on-done` | `#ffffff` | 完成勾的前景（在 `--c-done` 实心上） | 5.04:1 ✅ |
-| `--accent` | `#0e7490` | **焦点环 + 主操作** | 作图形 ≥3:1：5.04:1 ✅ |
+| `--accent` | `#0e7490` | **应用主色**：品牌标记 + 焦点环 + 主操作 | 作图形 ≥3:1：5.04:1 ✅ |
 | `--accent-focus` | `hsla(193 82% 31% / 0.16)` | 焦点环专用 | 即 `--accent` 本身 16% alpha |
 
 规则：**语义色的含义必须唯一，且不得跨义复用。**
 
 - `--c-done` 的语义是"完成"。凡**表达完成度**的场景都可用（状态框、进度条填充）——此时颜色与含义一致，是强化而非复用。
 - 用 `--c-done` 表达**其他含义**则禁止。典型反例：「今日」标记若用绿色，会让"绿 = 完成"的约定失效。
-- `--accent` 不得用于表达状态或完成度。
+- `--accent` 是应用主色，**不表示任何状态**：不得用青绿表示"进行中""已完成"或任何五状态之一。
 - 其余全部状态差异由符号承担（§4.2），不新增状态色。
 - `--accent-focus` 必须由 `--accent` 派生（注意 `#0e7490` 实为 `hsl(193 82% 31%)`，不要照抄近似值）。
 
@@ -164,8 +164,8 @@
 .todo { position: relative; padding: 10px 12px; min-height: 40px;
         border: none; background: none; box-shadow: none; }
 .todo:hover { background: var(--bg-hover); }
-.todo + .todo::before {           /* 缩进分隔线：left 对齐文字起点 */
-  content: ''; position: absolute; left: 44px; right: 0; top: 0;
+.todo + .todo::before {           /* 缩进分隔线：left 对齐文字起点 = 12 + 18 + 12 */
+  content: ''; position: absolute; left: 42px; right: 0; top: 0;
   height: 1px; background: var(--divider);
 }
 .todo:hover::before,
