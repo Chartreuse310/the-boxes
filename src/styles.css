@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.12（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.13（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -409,31 +409,116 @@ h1 {
 }
 
 /* ---------- 添加框（all / day 视图，主区顶部）---------- */
-/* 输入框是交互控件（style-guide §2.1 / §5.2）：--bg-surface 底 +
-   --border-control 描边（≥3:1，落在 page 上达标）+ --radius-control 圆角，
-   焦点环统一 3px --accent-focus。不得落在 hover / sunken 表面上。 */
+/* 输入框是交互控件（style-guide §2.1 / §5.6）：整行 .add-line 承载 surface 底 +
+   --border-control 描边 + --radius-control，焦点环在 :focus-within 上统一给。
+   `@` 下拉是浮层（§5.5）：surface + border-control + --radius-pop + --shadow-pop。
+   落在 page 背景上，控件描边 ≥3:1。 */
 .add-bar {
+  position: relative;
   margin: 0 0 12px;
 }
-.add-input {
-  width: 100%;
-  font: inherit;
-  font-size: var(--fs-body);
-  color: var(--text);
+.add-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   background: var(--bg-surface);
   border: 1px solid var(--border-control);
   border-radius: var(--radius-control);
-  padding: 9px 12px;
+  padding: 0 12px;
   transition: box-shadow var(--dur-fast) var(--ease),
     border-color var(--dur-fast) var(--ease);
+}
+.add-line:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-focus);
+}
+.add-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: var(--fs-body);
+  color: var(--text);
+  padding: 9px 0;
+}
+.add-input:focus {
+  outline: none;
 }
 .add-input::placeholder {
   color: var(--text-secondary);
 }
-.add-input:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-focus);
+
+/* 目标徽章：`@` 选中的落点文件，点击取消（回到落当天）。surface 内的小 chip */
+.add-target {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 45%;
+  font: inherit;
+  font-size: var(--fs-label);
+  color: var(--text-secondary);
+  background: var(--bg-sunken);
+  border: none;
+  border-radius: var(--radius-control);
+  padding: 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.add-target:hover {
+  color: var(--text);
+}
+.add-target-x {
+  font-size: var(--fs-body);
+  line-height: 1;
+}
+
+/* `@` 自动补全浮层（启用 §5.5） */
+.at-menu {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-pop);
+  box-shadow: var(--shadow-pop);
+}
+.at-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-control);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  cursor: pointer;
+}
+.at-item.is-active {
+  background: var(--bg-hover);
+}
+.at-new .at-label {
+  color: var(--accent);
+}
+.at-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.at-hint {
+  flex: none;
+  font-size: var(--fs-meta);
+  font-weight: 400;
+  color: var(--text-secondary);
 }
 
 /* ---------- 列表 ---------- */

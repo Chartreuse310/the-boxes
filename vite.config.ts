@@ -4,6 +4,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
 import path from 'node:path'
 import {
+  addTaskTodo,
   addTodo,
   ensureIdsInFile,
   migrateTodo,
@@ -295,6 +296,19 @@ function boxesApi(dataDir: string): Plugin {
           readFile(taskPath(dataDir, tg[1], tg[2]), 'utf8')
             .then((content) => send(200, { month: tg[1], slug: tg[2], content }))
             .catch(() => send(404, { error: 'not found' }))
+          return
+        }
+
+        // POST /api/tasks/:month/:slug/todos : 向任务添加 todo（界面输入框 @任务 路由 / 创建任务）
+        // 文件缺失则按 SPEC §5 建骨架再写入；归属由所在文件决定，行只带 ^id。
+        const at = pathname.match(/^\/tasks\/(\d{4}-\d{2})\/([^/]+)\/todos$/)
+        if (req.method === 'POST' && at) {
+          handle(async () => {
+            const body = await readBody()
+            const text = String(body.text ?? '')
+            const { id } = await addTaskTodo(dataDir, at[1], at[2], text)
+            return { ok: true, id }
+          })
           return
         }
 

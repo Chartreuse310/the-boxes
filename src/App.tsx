@@ -32,6 +32,59 @@ function addMonth(month: string, n: number): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}`
 }
 
+/**
+ * 添加框的路由目标：新 todo 整行落到哪个文件（归属 = 所在文件，SPEC v2.2）。
+ * day → inbox 某日文件；task → 已存在任务文件；newTask → 以当前月建任务骨架后写入。
+ */
+type AddTarget =
+  | { kind: 'day'; date: string }
+  | { kind: 'task'; month: string; slug: string; title: string }
+  | { kind: 'newTask'; name: string }
+
+/** `@` 下拉里的一条候选 */
+interface AtCand {
+  key: string
+  label: string
+  hint?: string
+  target: AddTarget
+}
+
+/**
+ * 依 `@` 后的查询串构造候选：已有任务 + 已有日期文件；查询是完整 ISO 日期则补「用该日期」；
+ * 查询非空且没有同名任务则补「创建任务」（末位，需显式选中才建，回车不自动建）。
+ */
+function buildAtCandidates(query: string, tasks: TaskSummary[], days: string[]): AtCand[] {
+  const q = query.trim()
+  const out: AtCand[] = []
+  for (const t of tasks.filter((x) => x.slug.includes(q) || (x.title ?? '').includes(q)).slice(0, 5)) {
+    out.push({
+      key: `task:${t.month}/${t.slug}`,
+      label: t.title || t.slug,
+      hint: `任务 ${t.month}`,
+      target: { kind: 'task', month: t.month, slug: t.slug, title: t.title || t.slug },
+    })
+  }
+  for (const d of days.filter((x) => x.includes(q)).slice(0, 5)) {
+    out.push({ key: `day:${d}`, label: d, hint: '日期', target: { kind: 'day', date: d } })
+  }
+  // 查询本身是合法 ISO 日期（哪怕当天文件还没建）→ 可路由过去，落盘时自动建日文件
+  if (/^\d{4}-\d{2}-\d{2}$/.test(q) && !days.includes(q)) {
+    out.unshift({ key: `day:${q}`, label: q, hint: '新日期', target: { kind: 'day', date: q } })
+  }
+  // 无同名任务时给「创建任务」；需显式选中（回车不自动建，避免手滑建库）
+  if (q && !tasks.some((t) => t.slug === q)) {
+    out.push({ key: `new:${q}`, label: `创建任务 ${q}`, hint: '新任务', target: { kind: 'newTask', name: q } })
+  }
+  return out
+}
+
+/** 目标徽章文案 */
+function targetLabel(t: AddTarget): string {
+  if (t.kind === 'day') return t.date
+  if (t.kind === 'task') return t.title
+  return `新建任务 ${t.name}`
+}
+
 /** 状态 → 中文名。只用于无障碍标签：§6 禁止把内部枚举名（done/scheduled）念给用户。 */
 const STATE_LABEL: Record<TodoState, string> = {
   todo: '待办',
@@ -320,6 +373,11 @@ export default function App() {
   const [info, setInfo] = useState<BoxesInfo | null>(null)
   // 添加框草稿（all / day 视图输入，回车提交后清空）
   const [draft, setDraft] = useState('')
+  // `@` 选中的路由目标（null = 未选，提交时落当天 / 正在看的那天）
+  const [target, setTarget] = useState<AddTarget | null>(null)
+  // `@` 下拉键盘高亮项下标
+  const [active, setActive] = useState(0)
+  const inputRef = useRef<HTMLInputElement | null>(null)
 
   const loadDay = async (date: string) => {
     const day = await api.getDay(date)
@@ -426,22 +484,79 @@ export default function App() {
     else await api.taskReorder(view.month, view.slug, newOrder)
   }
 
-  // 添加框回车（仅 all / day 视图）：落「正在看的那天」，平铺时落今天。
-  // 成功后清空草稿、刷新日历圆点与当前视图；失败回填草稿，不吞掉用户输入。
+  // —— 添加框：`@` 路由到某个文件（归属 = 所在文件），回车整行落盘 ——
+  // 当前 `@` 查询串（草稿末尾未闭合的 @token），有则弹下拉
+  const atQuery = /@([^\s@]*)$/.exec(draft)?.[1] ?? null
+  const atCandidates = atQuery === null ? [] : buildAtCandidates(atQuery, tasks, days)
+  const menuShown = atQuery !== null && atCandidates.length > 0
+  const activeIdx = menuShown ? Math.min(active, atCandidates.length - 1) : 0
+
+  // 选中一条候选：记为路由目标，并从草稿里抹掉 `@查询`（token 只用于唤起，不落进正文）
+  const pickTarget = (c: AtCand) => {
+    setTarget(c.target)
+    setDraft((d) => d.replace(/@([^\s@]*)$/, '').replace(/\s+$/, ''))
+    setActive(0)
+    inputRef.current?.focus()
+  }
+
+  const clearTarget = () => {
+    setTarget(null)
+    inputRef.current?.focus()
+  }
+
+  // 下拉打开时接管方向键 / 回车 / Esc；关闭时回车走表单提交
+  const onDraftKey = (e: import('react').KeyboardEvent<HTMLInputElement>) => {
+    if (!menuShown) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActive((a) => Math.min(a + 1, atCandidates.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActive((a) => Math.max(a - 1, 0))
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault()
+      pickTarget(atCandidates[activeIdx])
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setDraft((d) => d.replace(/@([^\s@]*)$/, '')) // 抹掉未选中的 @token 即收起
+    }
+  }
+
+  // 提交：目标来自下拉选中；否则解析正文里残留的 `@token`（键盘党：`@2026-..`/`@已有任务` 直接回车）；
+  // 都没有 → 落正在看的那天（平铺落今天）。失败回填草稿与目标，不吞输入。
   const submitDraft = async () => {
-    const text = draft.trim()
-    if (!text) return
-    const target = view?.kind === 'day' ? view.date : today()
+    let text = draft.trim()
+    let tgt: AddTarget | null = target
+    if (!tgt) {
+      const m = text.match(/@([^\s@]+)/)
+      if (m) {
+        const tok = m[1]
+        if (/^\d{4}-\d{2}-\d{2}$/.test(tok)) tgt = { kind: 'day', date: tok }
+        else {
+          const tk = tasks.find((x) => x.slug === tok)
+          if (tk) tgt = { kind: 'task', month: tk.month, slug: tk.slug, title: tk.title || tk.slug }
+        }
+        if (tgt) text = text.replace(m[0], '').trim()
+      }
+    }
+    if (!text) return // 只有目标没有正文，不提交
+    const route: AddTarget = tgt ?? {
+      kind: 'day',
+      date: view?.kind === 'day' ? view.date : today(),
+    }
     setDraft('')
+    setTarget(null)
     try {
-      await api.addTodo(target, text)
+      if (route.kind === 'day') await api.addTodo(route.date, text)
+      else if (route.kind === 'task') await api.addTaskTodo(route.month, route.slug, text)
+      else await api.addTaskTodo(today().slice(0, 7), route.name, text) // 新任务：按当前月建骨架
     } catch {
       setDraft(text)
+      setTarget(tgt)
       return
     }
     api.listDays().then(setDays).catch(() => {})
-    // 平铺按日期倒序，新行落今日组（文件不存在时今日会新进列表）——
-    // 与筛选视图都走一次重读，让磁盘上的新行进入界面。
+    api.listTasks().then(setTasks).catch(() => {})
     if (view === null) setView({ kind: 'all' })
     else refreshView()
   }
@@ -588,8 +703,8 @@ export default function App() {
         </aside>
 
         <main>
-        {/* 添加框（默认平铺 / 某日视图）：回车落今天 / 正在看的那天。
-            任务视图不显示——界面内建任务 / 向任务加 todo 属 M2。 */}
+        {/* 添加框（默认平铺 / 某日视图）：`@` 唤起文件下拉（任务 + 日期），选中即把新行
+            路由到该文件；无匹配可「创建任务」。归属由所在文件决定。任务视图不显示。 */}
         {(view?.kind === 'all' || view?.kind === 'day') && (
           <form
             className="add-bar"
@@ -598,19 +713,69 @@ export default function App() {
               submitDraft()
             }}
           >
-            <input
-              className="add-input"
-              type="text"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder={
-                view?.kind === 'day'
-                  ? `添加到 ${view.date}…`
-                  : '添加 todo…（可用 @日期 +任务，回车）'
-              }
-              aria-label="添加 todo"
-              autoComplete="off"
-            />
+            <div className="add-line">
+              {target && (
+                <button
+                  type="button"
+                  className="add-target"
+                  onClick={clearTarget}
+                  title="点击取消目标（当前：回车添加到此文件）"
+                  aria-label={`添加目标：${targetLabel(target)}，点击取消`}
+                >
+                  <span className="add-target-x" aria-hidden>
+                    ×
+                  </span>
+                  {targetLabel(target)}
+                </button>
+              )}
+              <input
+                ref={inputRef}
+                className="add-input"
+                type="text"
+                value={draft}
+                onChange={(e) => {
+                  setDraft(e.target.value)
+                  setActive(0)
+                }}
+                onKeyDown={onDraftKey}
+                placeholder={
+                  target
+                    ? '继续输入内容，回车添加'
+                    : view?.kind === 'day'
+                      ? `添加到 ${view.date}…（@ 选任务/日期）`
+                      : '添加 todo…（@ 选任务/日期，回车）'
+                }
+                aria-label="添加 todo"
+                aria-autocomplete="list"
+                aria-expanded={menuShown}
+                role="combobox"
+                autoComplete="off"
+              />
+            </div>
+            {menuShown && (
+              <ul className="at-menu" role="listbox" aria-label="添加目标">
+                {atCandidates.map((c, i) => (
+                  <li
+                    key={c.key}
+                    role="option"
+                    aria-selected={i === activeIdx}
+                    className={
+                      'at-item' +
+                      (c.target.kind === 'newTask' ? ' at-new' : '') +
+                      (i === activeIdx ? ' is-active' : '')
+                    }
+                    onMouseEnter={() => setActive(i)}
+                    onMouseDown={(e) => {
+                      e.preventDefault() // 抢在 input blur 之前选中
+                      pickTarget(c)
+                    }}
+                  >
+                    <span className="at-label">{c.label}</span>
+                    {c.hint && <span className="at-hint">{c.hint}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
           </form>
         )}
         {/* 任务详情头：名称 + 目标 + 状态行（v0.3.11 起为主区第一个元素） */}

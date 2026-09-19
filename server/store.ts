@@ -305,3 +305,44 @@ export async function addTodo(
   await writeFile(file, `${base}${line}\n`)
   return { id }
 }
+
+/**
+ * 向任务文件添加一条 todo（界面输入框 `@任务` 路由，或选中「创建任务」）。
+ * 归属由所在文件决定，故只写 `- [ ] 正文 ^id`，不带 `+任务`/`@日期` token（SPEC v2.2 精神）。
+ * 任务文件不存在则按 SPEC §5 建骨架（`# 任务：` + 状态/提出 + `## todos`），提出日期取该月内的
+ * 今天（month 非当前月时退而取月初 `${month}-01`）。month/slug 经 taskPath 校验（slug 不含空格）。
+ */
+export async function addTaskTodo(
+  dataDir: string,
+  month: string,
+  slug: string,
+  text: string,
+): Promise<{ id: string }> {
+  const file = taskPath(dataDir, month, slug) // 非法 month/slug 直接抛出
+  let content: string
+  try {
+    content = await readFile(file, 'utf8')
+  } catch {
+    const created = month === localDate().slice(0, 7) ? localDate() : `${month}-01`
+    await mkdir(path.dirname(file), { recursive: true })
+    content = `# 任务：${slug}\n\n**状态**：进行中\n**提出**：${created}\n\n## todos\n\n`
+    await writeFile(file, content)
+  }
+
+  const body = text.trim().replace(/\s+/g, ' ').trim()
+  if (!body) throw new Error('todo 内容为空')
+
+  const existing = new Set<string>()
+  for (const raw of content.split('\n')) {
+    const m = raw.match(ID_RE)
+    if (m) existing.add(m[2])
+  }
+  let id: string
+  do {
+    id = randomId()
+  } while (existing.has(id))
+
+  const base = content === '' || content.endsWith('\n') ? content : content + '\n'
+  await writeFile(file, `${base}- [ ] ${body} ^${id}\n`)
+  return { id }
+}

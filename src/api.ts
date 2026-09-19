@@ -73,6 +73,11 @@ export interface BoxesApi {
   getTask(month: string, slug: string): Promise<RawTask | null>
   /** 补齐任务文件缺失 id，返回最新原文 */
   taskEnsureIds(month: string, slug: string): Promise<string>
+  /**
+   * 向任务文件添加一条 todo（界面输入框 `@任务` 路由 / 创建任务）。
+   * 任务文件不存在则服务端按 SPEC §5 建骨架。归属由所在文件决定，行只带 `^id`。
+   */
+  addTaskTodo(month: string, slug: string, text: string): Promise<string>
   /** 修改任务内某 todo 状态（三态） */
   taskSetState(month: string, slug: string, id: string, state: string): Promise<void>
   /** 按给定 id 顺序重排任务内 todo */
@@ -151,6 +156,15 @@ const httpApi: BoxesApi = {
     })
     if (!r.ok) throw new Error(`taskEnsureIds 失败：${r.status} ${await r.text()}`)
     return (await r.json()).content
+  },
+  addTaskTodo: async (month, slug, text) => {
+    const r = await fetch(`/api/tasks/${month}/${encodeURIComponent(slug)}/todos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    })
+    if (!r.ok) throw new Error(`addTaskTodo 失败：${r.status} ${await r.text()}`)
+    return (await r.json()).id
   },
   taskSetState: async (month, slug, id, state) => {
     const r = await fetch(`/api/tasks/${month}/${encodeURIComponent(slug)}/todos/${id}/state`, {
