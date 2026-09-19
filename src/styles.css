@@ -81,7 +81,7 @@ body {
 }
 
 .app {
-  max-width: 640px;
+  max-width: 864px;
   margin: 0 auto;
   padding: 48px 20px 56px;
 }
@@ -134,58 +134,80 @@ h1 {
   grid-area: 2 / 2;
 }
 
-/* ---------- 日期选择 ---------- */
-.date-picker {
+/* ---------- 布局：左侧日期列表 + 右侧任务列表 ---------- */
+.layout {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 28px;
 }
 
-/* 「今日」标记用中性色：绿色已被"完成"占用（§2.2 禁止语义色跨义复用） */
-.today-badge {
+.layout > main {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 侧栏随页面滚动吸顶；分组标题与日期项共用行控件圆角 */
+.sidebar {
+  flex: none;
+  width: 168px;
+  position: sticky;
+  top: 24px;
+}
+.sidebar-heading {
   font-size: var(--fs-meta);
   font-weight: 500;
-  letter-spacing: 0.02em;
   color: var(--text-secondary);
-  background: var(--bg-sunken);
-  padding: 4px 8px;
-  border-radius: var(--radius-control);
-  white-space: nowrap;
+  letter-spacing: 0.02em;
+  padding: 0 8px;
+  margin: 0 0 4px;
+}
+.sidebar-section + .sidebar-section {
+  margin-top: 16px;
 }
 
-.select-wrap {
-  position: relative;
-}
-.select-wrap select {
-  appearance: none;
-  -webkit-appearance: none;
+.day-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: none;
   font: inherit;
   font-size: var(--fs-label);
   font-weight: 500;
   color: var(--text);
-  padding: 8px 32px 8px 12px;
-  /* 控件边界须 ≥3:1（WCAG 1.4.11），故用 --border-control 而非 --divider */
-  border: 1px solid var(--border-control);
-  border-radius: var(--radius-control);
-  background: var(--bg-surface);
+  text-align: left;
   cursor: pointer;
-  transition: border-color var(--dur-fast) var(--ease);
+  font-variant-numeric: tabular-nums;
+  transition: background var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
 }
-.select-wrap::after {
-  content: '';
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  width: 7px;
-  height: 7px;
-  border-right: 1.7px solid var(--text-secondary);
-  border-bottom: 1.7px solid var(--text-secondary);
-  transform: translateY(-70%) rotate(45deg);
-  pointer-events: none;
+.day-item:hover {
+  background: var(--bg-hover);
 }
-.select-wrap select:focus-visible {
+.day-item:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--accent-focus);
+}
+.day-item.is-selected {
+  background: var(--bg-sunken);
+}
+
+/* 「今日」标记用中性色：绿色已被"完成"占用（§2.2 禁止语义色跨义复用） */
+.day-today {
+  font-size: var(--fs-meta);
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+/* 拖放落点：todo 拖到该日期上即迁移。inset 描边不占布局，
+   用 --accent 是"可交互目标"语义（与 focus 同源），不引入新色值 */
+.day-item.is-drag-over {
+  background: var(--accent-focus);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
 /* ---------- 当日进度条 ---------- */
@@ -282,7 +304,7 @@ h1 {
 }
 
 /* ---------- 状态框 ---------- */
-/* 五个状态只有"完成"有颜色，其余四态共用中性灰，靠符号区分（§4.2） */
+/* 三个状态只有"完成"有颜色，其余两态共用中性灰，靠符号区分（§4.2） */
 .box {
   flex: none;
   width: var(--checkbox-size);
@@ -328,8 +350,8 @@ h1 {
 
 /* 切换状态时的"落子"反馈：仅 scale + opacity，≤150ms */
 /* 由内容收缩包裹 —— 不要改成 width/height: 100%。
-   字形状态下"收缩包裹的盒子被 .box 居中"才是它们现在的位置；改成铺满会把
-   > 与 < 挪动约 0.2px（实测），使两个本来已定型的符号发生光栅化变化。 */
+   内容收缩包裹、再被 .box 居中，是符号现在的定位方式；改成铺满会改变
+   收缩盒的几何（v1.x 实测 `>` `<` 字形因此挪动约 0.2px，发生光栅化变化）。 */
 .box-sym {
   display: inline-flex;
   align-items: center;
@@ -384,91 +406,6 @@ h1 {
   height: var(--checkbox-size);
 }
 
-/* ---------- 迁移菜单 ---------- */
-.menu-wrap {
-  flex: none;
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-.menu-trigger {
-  border: none;
-  background: none;
-  color: var(--text-secondary);
-  font-size: var(--fs-body);
-  line-height: 1;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: var(--radius-control);
-  opacity: 0;
-  transition: opacity var(--dur-fast) var(--ease),
-    background var(--dur-fast) var(--ease);
-}
-.todo:hover .menu-trigger,
-.menu-trigger:focus-visible {
-  opacity: 1;
-}
-.menu-trigger:hover {
-  background: var(--bg-sunken);
-}
-.menu-trigger:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--accent-focus);
-}
-
-.menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  z-index: 20;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-control);
-  border-radius: var(--radius-pop);
-  box-shadow: var(--shadow-pop);
-  padding: 4px;
-  min-width: 148px;
-  display: flex;
-  flex-direction: column;
-  animation: pop-in 140ms var(--ease) both;
-}
-@keyframes pop-in {
-  from {
-    opacity: 0;
-    transform: scale(0.97);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-.menu button {
-  border: none;
-  background: none;
-  text-align: left;
-  padding: 8px 10px;
-  font: inherit;
-  font-size: var(--fs-label);
-  font-weight: 500;
-  border-radius: var(--radius-control);
-  cursor: pointer;
-  color: var(--text);
-  transition: background var(--dur-fast) var(--ease);
-}
-.menu button:hover {
-  background: var(--bg-hover);
-}
-.menu-date {
-  margin-top: 4px;
-  font: inherit;
-  font-size: var(--fs-label);
-  padding: 8px 10px;
-  border: 1px solid var(--border-control);
-  border-radius: var(--radius-control);
-  width: 100%;
-  background: var(--bg-surface);
-  color: var(--text);
-}
-
 /* ---------- 完成/开始日期注记 ---------- */
 .done-note {
   color: var(--text-secondary);
@@ -521,12 +458,33 @@ footer {
 }
 
 /* ---------- 响应式 ---------- */
-@media (max-width: 520px) {
+/* 窄屏：侧栏改为横向滚动的一行日期，分组标题隐藏（分组语义弱化为先后） */
+@media (max-width: 720px) {
   .app {
     padding: 48px 16px 56px;
   }
-  .today-badge {
-    display: none; /* 窄屏省位：当前选中日期即"今日"自明 */
+  .layout {
+    display: block;
+  }
+  .sidebar {
+    position: static;
+    width: auto;
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    margin-bottom: 16px;
+    padding-bottom: 4px;
+  }
+  .sidebar-section {
+    display: flex;
+    gap: 4px;
+  }
+  .sidebar-heading {
+    display: none;
+  }
+  .day-item {
+    width: auto;
+    flex: none;
   }
   .done-note {
     white-space: normal; /* 长日期注记允许换行，避免溢出 */

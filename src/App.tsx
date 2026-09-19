@@ -9,21 +9,12 @@ function today(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
-/** 某日的次日（YYYY-MM-DD，本地时区） */
-function nextDay(date: string): string {
+/** 某日 +n 天（YYYY-MM-DD，本地时区）：生成侧栏"接下来"的日期用 */
+function addDays(date: string, n: number): string {
   const d = new Date(date + 'T00:00:00')
-  d.setDate(d.getDate() + 1)
-  const p = (n: number) => String(n).padStart(2, '0')
+  d.setDate(d.getDate() + n)
+  const p = (v: number) => String(v).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-}
-
-/** 状态 → box 内字形（the-boxes 的品牌就是这五个盒子）
- *  done / doing 不在表内：它们不用字形，改由矢量绘制（<DoneCheck /> / <DoingHalf />，见下）。
- *  类型上直接排除这两个状态，而不是留一个用不到的 '✓' '/' —— 免得后来者以为改这里能改符号。 */
-const STATE_SYMBOL: Record<Exclude<TodoState, 'done' | 'doing'>, string> = {
-  todo: '',
-  deferred: '>',
-  scheduled: '<',
 }
 
 /** 状态 → 中文名。只用于无障碍标签：§6 禁止把内部枚举名（done/scheduled）念给用户。 */
@@ -31,16 +22,11 @@ const STATE_LABEL: Record<TodoState, string> = {
   todo: '待办',
   doing: '进行中',
   done: '完成',
-  deferred: '顺延到今日',
-  scheduled: '排期到以后',
 }
 
 /** 完成勾的线宽（单位与 viewBox 一致，1 单位 = 1 CSS px）。
- *  0.9 来自与同一行里 `/` `>` `<` 三个字形（12px/500）的实测对齐，
- *  量法是覆盖率场 α≥0.5 下的垂直剖面（16 倍设备像素比截图）：
- *      / = 0.807 · > = 0.942 · < = 0.940  （CSS px，按符号取均值 0.896）
- *  取 0.9 与字形整体均值差 +0.004px，是"和别的符号一样粗"的解。
- *  box 自身描边为 1.5px，故勾不会比外圈更抢眼。 */
+ *  0.9 来自与同一行里 `/` 字形（12px/500，实测 0.807）的对齐，取略粗一档，
+ *  是"和别的符号一样粗"的解。box 自身描边为 1.5px，故勾不会比外圈更抢眼。 */
 const CHECK_STROKE = 0.9
 
 /**
@@ -87,11 +73,11 @@ function DoneCheck() {
  *
  * 为什么不用渐变做半填充：渐变要额外引入一个色值（v0.2 的 `--c-doing-tint`
  * 就是因此被删）。这里用真实的矢量半圆盘，颜色仍是外圈那个 `currentColor`，
- * §4.2「五个状态只有完成有颜色」因此不被打破 —— 被禁的是"用渐变"，不是"半填充"。
+ * §4.2「三个状态只有完成有颜色」因此不被打破 —— 被禁的是"用渐变"，不是"半填充"。
  *
  * 为什么只填、不描边：
  * - 外圈已经提供了 1.5px 的圆环。若再把这段弧描一笔（0.9px），这个状态的环
- *   会变成约 1.95px，比其他四个状态粗一圈，是最容易露馅的那种"偏心"。
+ *   会变成约 1.95px，比其他状态粗一圈，是最容易露馅的那种"偏心"。
  * - 分割线也不必另画一笔：它就是半圆盘的直边，与外圈同色，画了也看不出来。
  *
  * 几何：viewBox 取**单位圆**（2×2，圆心 (1,1)，半径 1），于是这个符号与
@@ -125,7 +111,7 @@ function DoingHalf() {
 /** 点击三态循环：只走到完成，停在 [x]，不回环 */
 const STATE_CYCLE: TodoState[] = ['todo', 'doing', 'done']
 
-/** 点击 box 会推进到的下一个状态；不可推进（终态，或 >/< 这类非三态）时返回 null */
+/** 点击 box 会推进到的下一个状态；已到终态 [x] 时返回 null */
 function nextState(state: TodoState): TodoState | null {
   const i = STATE_CYCLE.indexOf(state)
   return i === -1 || i === STATE_CYCLE.length - 1 ? null : STATE_CYCLE[i + 1]
@@ -154,10 +140,10 @@ export default function App() {
   const [days, setDays] = useState<string[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [todos, setTodos] = useState<Todo[] | null>(null)
-  const dragIndex = useRef<number | null>(null)
-  // 迁移菜单：记录当前打开的 todo id 及其"迁移到以后"是否在选日期
-  const [openMenu, setOpenMenu] = useState<string | null>(null)
-  const [pickingDate, setPickingDate] = useState<string | null>(null)
+  // 拖动中的 todo：列表内 drop → 重排；侧栏日期上 drop → 迁移
+  const drag = useRef<{ index: number; id: string } | null>(null)
+  // 拖动悬停在哪个侧栏日期上（高亮反馈）
+  const [dragOverDay, setDragOverDay] = useState<string | null>(null)
   // 运行环境信息（数据目录 / 版本）：只用于 footer。取不到就不显示那一段，不阻塞界面。
   const [info, setInfo] = useState<BoxesInfo | null>(null)
 
@@ -188,29 +174,13 @@ export default function App() {
     }
     setTodos(null)
     reload(selected)
-    setOpenMenu(null)
-    setPickingDate(null)
   }, [selected])
-
-  // 菜单只在外部点击时关闭。不能用 mouseleave：浮层与行之间有 4px 间隙，
-  // 鼠标穿行时已离开 li 的 DOM 子树会误关；且 <input type="date"> 的原生
-  // 日历弹层不属于页面 DOM，鼠标移上去同样触发 mouseleave——日期根本点不到。
-  useEffect(() => {
-    if (openMenu === null) return
-    const onDown = (e: MouseEvent) => {
-      if ((e.target as Element | null)?.closest('.menu-wrap')) return
-      setOpenMenu(null)
-      setPickingDate(null)
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [openMenu])
 
   // 点击 box：三态前进（todo→doing→done，done 停住）
   const cycleState = async (todo: Todo, index: number) => {
     if (selected === null || !todo.id) return
     const next = nextState(todo.state)
-    if (!next) return // 已到 done，或 >/< 这类非三态 → 不响应点击
+    if (!next) return // 已到 done 终态 → 不响应点击
     setTodos((prev) => {
       if (!prev) return prev
       const copy = [...prev]
@@ -221,35 +191,30 @@ export default function App() {
     reload(selected)
   }
 
-  // 迁移（SPEC v1.3 物理移动）：原行改 [>] / [<] 留在原文件作记录，
-  // 目标日文件新建同名 [ ] 待办。目标文件可能是新建的，需刷新日期列表。
-  const migrate = async (todo: Todo, target: 'today' | 'later', laterDate?: string) => {
-    if (selected === null || !todo.id) return
-    const state: TodoState = target === 'today' ? 'deferred' : 'scheduled'
-    const migrateDate = target === 'today' ? today() : laterDate
-    if (!migrateDate || migrateDate === selected) return // 目标即本文件：无迁移意义
-    await api.migrate(selected, todo.id, state, migrateDate)
-    setOpenMenu(null)
-    setPickingDate(null)
+  // 拖拽迁移（SPEC v2.0 物理移动）：todo 行原样移动到目标日文件。
+  // 目标文件可能是新建的，需刷新日期列表。
+  const migrateTo = async (target: string) => {
+    const dragged = drag.current
+    drag.current = null
+    if (selected === null || !dragged || target === selected) return
+    await api.migrate(selected, dragged.id, target)
     api.listDays().then(setDays)
     reload(selected)
   }
 
-  // 拖动重排：drop 时按新 id 顺序提交
+  // 拖动重排：drop 时按新 id 顺序提交。
+  // 新顺序从当前 todos 直接算，不经 setTodos 的 updater 收集——
+  // React 18 批处理下 updater 是 re-render 时才执行的，同步代码读不到它赋的值。
   const onDrop = async (targetIndex: number) => {
-    const from = dragIndex.current
-    dragIndex.current = null
-    if (from === null || from === targetIndex || selected === null) return
-    let newOrder: string[] | null = null
-    setTodos((prev) => {
-      if (!prev) return prev
-      const copy = [...prev]
-      const [moved] = copy.splice(from, 1)
-      copy.splice(targetIndex, 0, moved)
-      newOrder = copy.map((t) => t.id).filter(Boolean) as string[]
-      return copy
-    })
-    if (newOrder) await api.reorder(selected, newOrder)
+    const from = drag.current
+    drag.current = null
+    if (!from || from.index === targetIndex || selected === null || !todos) return
+    const copy = [...todos]
+    const [moved] = copy.splice(from.index, 1)
+    copy.splice(targetIndex, 0, moved)
+    setTodos(copy)
+    const newOrder = copy.map((t) => t.id).filter(Boolean) as string[]
+    await api.reorder(selected, newOrder)
   }
 
   const doneCount = todos?.filter((t) => t.state === 'done').length ?? 0
@@ -274,6 +239,17 @@ export default function App() {
     ? `${shortDir(info.dataDir, info.home)}/inbox/${selected}.md`
     : `inbox/${selected}.md`
 
+  // 侧栏日期分两组：「接下来」= 今天起 7 天（未来日期即使文件不存在也显示，
+  // 拖放即迁移、目标文件自动创建）；「更早」= 已有文件中不在前者的日期（倒序）。
+  const todayStr = today()
+  const upcoming = Array.from({ length: 7 }, (_, i) => addDays(todayStr, i))
+  const upcomingSet = new Set(upcoming)
+  const earlier = days.filter((d) => !upcomingSet.has(d))
+  const sections = [
+    { heading: '接下来', dates: upcoming },
+    ...(earlier.length > 0 ? [{ heading: '更早', dates: earlier }] : []),
+  ]
+
   return (
     <div className="app">
       <header>
@@ -285,38 +261,59 @@ export default function App() {
           </span>
           <h1>the-boxes</h1>
         </div>
-        <div className="date-picker">
-          {selected === today() && <span className="today-badge">今日</span>}
-          <div className="select-wrap">
-            <select
-              value={selected ?? ''}
-              onChange={(e) => setSelected(e.target.value || null)}
-              disabled={days.length === 0}
-              aria-label="选择日期"
-            >
-              {days.length === 0 && <option value="">暂无记录</option>}
-              {days.map((d) => (
-                <option key={d} value={d}>
-                  {fmtDate(d)}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
       </header>
 
-      {todos && todos.length > 0 && (
-        <div className="day-status" role="progressbar" aria-valuenow={donePct} aria-label={`${doneCount}/${totalCount} 完成`}>
-          <span className="day-status-label">
-            {doneCount}/{totalCount} 完成
-          </span>
-          <div className="bar">
-            <span className="bar-fill" style={{ width: `${donePct}%` }} />
-          </div>
-        </div>
-      )}
+      <div className="layout">
+        <aside className="sidebar" aria-label="日期列表">
+          {sections.map((sec) => (
+            <div className="sidebar-section" key={sec.heading}>
+              <div className="sidebar-heading">{sec.heading}</div>
+              {sec.dates.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  className={
+                    'day-item' +
+                    (selected === d ? ' is-selected' : '') +
+                    (dragOverDay === d ? ' is-drag-over' : '')
+                  }
+                  aria-current={selected === d ? 'true' : undefined}
+                  onClick={() => setSelected(d)}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'move'
+                  }}
+                  onDragEnter={() => setDragOverDay(d)}
+                  onDragLeave={(e) => {
+                    // 子元素间穿行会冒泡 dragleave，只有真正离开该项才取消高亮
+                    if (!e.currentTarget.contains(e.relatedTarget as Node | null))
+                      setDragOverDay(null)
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    setDragOverDay(null)
+                    migrateTo(d)
+                  }}
+                >
+                  <span className="day-label">{fmtDate(d)}</span>
+                  {d === todayStr && <span className="day-today">今日</span>}
+                </button>
+              ))}
+            </div>
+          ))}
+        </aside>
 
-      <main>
+        <main>
+        {todos && todos.length > 0 && (
+          <div className="day-status" role="progressbar" aria-valuenow={donePct} aria-label={`${doneCount}/${totalCount} 完成`}>
+            <span className="day-status-label">
+              {doneCount}/{totalCount} 完成
+            </span>
+            <div className="bar">
+              <span className="bar-fill" style={{ width: `${donePct}%` }} />
+            </div>
+          </div>
+        )}
         {todos === null ? (
           <p className="muted">加载中…</p>
         ) : todos.length === 0 ? (
@@ -333,7 +330,13 @@ export default function App() {
                 className={`todo todo-${t.state}`}
                 style={{ '--i': i } as import('react').CSSProperties}
                 draggable={!!t.id}
-                onDragStart={() => (dragIndex.current = i)}
+                onDragStart={() => {
+                  if (t.id) drag.current = { index: i, id: t.id }
+                }}
+                onDragEnd={() => {
+                  drag.current = null
+                  setDragOverDay(null)
+                }}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => onDrop(i)}
               >
@@ -348,9 +351,7 @@ export default function App() {
                       <DoneCheck />
                     ) : t.state === 'doing' ? (
                       <DoingHalf />
-                    ) : (
-                      STATE_SYMBOL[t.state]
-                    )}
+                    ) : null}
                   </span>
                 </button>
                 <span className="text">
@@ -372,52 +373,12 @@ export default function App() {
                     日期用完整 ISO（那也是当日的文件名），任务统一用 @ 记号。 */}
                 {t.task && <span className="chip chip-task">@{t.task}</span>}
                 {t.date && <span className="chip chip-date">@{t.date}</span>}
-
-                {/* 迁移菜单只对 [ ] 与 [/] 开放：[>]/[<] 是迁移记录、[x] 已完结，
-                    再迁会在目标文件产生重复副本 */}
-                {t.id && (t.state === 'todo' || t.state === 'doing') && (
-                  <div className="menu-wrap">
-                    <button
-                      className="menu-trigger"
-                      aria-label="迁移"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setOpenMenu(openMenu === t.id ? null : t.id)
-                      }}
-                    >
-                      ⋯
-                    </button>
-                    {openMenu === t.id && (
-                      <div className="menu">
-                        {/* 查看今日文件时无"迁移到今天"——todo 本就在今天 */}
-                        {selected !== today() && (
-                          <button onClick={() => migrate(t, 'today')}>迁移到今天</button>
-                        )}
-                        <button
-                          onClick={() => setPickingDate(pickingDate === t.id ? null : t.id)}
-                        >
-                          迁移到以后…
-                        </button>
-                        {pickingDate === t.id && (
-                          <input
-                            type="date"
-                            className="menu-date"
-                            /* 查看今日时下限为明天（选今天等于没迁）；看过去时下限为今天 */
-                            min={selected === today() ? nextDay(today()) : today()}
-                            onChange={(e) => {
-                              if (e.target.value) migrate(t, 'later', e.target.value)
-                            }}
-                          />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
               </li>
             ))}
           </ul>
         )}
-      </main>
+        </main>
+      </div>
 
       <footer className="muted">{footerInfo ?? '数据存于本地 Markdown 文件'}</footer>
     </div>

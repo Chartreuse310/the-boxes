@@ -147,34 +147,30 @@ function boxesApi(dataDir: string): Plugin {
           return
         }
 
-        // PUT /api/days/:date/todos/:id/state : 修改某 todo 状态（可选迁移日期）
+        // PUT /api/days/:date/todos/:id/state : 修改某 todo 状态（三态）
         const ms = pathname.match(/^\/days\/(\d{4}-\d{2}-\d{2})\/todos\/([a-z0-9]+)\/state$/)
         if (req.method === 'PUT' && ms) {
           handle(async () => {
             const body = await readBody()
             const state = String(body.state ?? '')
-            const allowed = ['todo', 'doing', 'done', 'deferred', 'scheduled']
+            const allowed = ['todo', 'doing', 'done']
             if (!allowed.includes(state)) throw new Error(`非法状态：${state}`)
-            const migrateDate = typeof body.migrateDate === 'string' ? body.migrateDate : undefined
-            await setState(dataDir, ms[1], ms[2], state as TodoState, migrateDate)
+            await setState(dataDir, ms[1], ms[2], state as TodoState)
             return { ok: true }
           })
           return
         }
 
-        // PUT /api/days/:date/todos/:id/migrate : 迁移（SPEC v1.3 物理移动）
-        // 原行改 [>] / [<] 留记录；目标日文件新建同名 [ ] 待办（文件不存在则创建）
+        // PUT /api/days/:date/todos/:id/migrate : 迁移（SPEC v2.0 整行原样移动）
+        // 源文件删行，目标日文件原样追加（文件不存在则创建）
         const mm = pathname.match(/^\/days\/(\d{4}-\d{2}-\d{2})\/todos\/([a-z0-9]+)\/migrate$/)
         if (req.method === 'PUT' && mm) {
           handle(async () => {
             const body = await readBody()
-            const state = String(body.state ?? '')
-            if (state !== 'deferred' && state !== 'scheduled')
-              throw new Error(`非法迁移状态：${state}`)
             const target = String(body.target ?? '')
             if (!/^\d{4}-\d{2}-\d{2}$/.test(target)) throw new Error(`非法目标日期：${target}`)
             if (target === mm[1]) throw new Error('目标日期与源文件相同，无迁移意义')
-            await migrateTodo(dataDir, mm[1], mm[2], state, target)
+            await migrateTodo(dataDir, mm[1], mm[2], target)
             return { ok: true }
           })
           return
