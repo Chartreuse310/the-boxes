@@ -1,7 +1,8 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { readdir, readFile } from 'node:fs/promises'
-import type { Dirent } from 'node:fs'
+import { watch as fsWatch, mkdirSync, type Dirent } from 'node:fs'
+import type { ServerResponse } from 'node:http'
 import path from 'node:path'
 import {
   addTaskTodo,
@@ -107,13 +108,45 @@ async function readVersions(): Promise<{ version: string | null; specVersion: st
  *   GET /api/info        → { dataDir, home, version, specVersion } 运行环境信息
  *   GET /api/days        → ["2026-09-19", ...] 有记录的日期，倒序
  *   GET /api/days/:date  → { date, content } 该日 inbox 的原文 markdown
+ *   GET /api/events      → SSE 文件变更流（数据目录改动即推 `changed`，界面自动刷新）
  *
- * 只读、仅本机；日期参数经过正则校验，防止路径穿越。
+ * 开发期读写、仅本机；日期/路径参数经过正则校验，防止路径穿越。打包 Tauri 时由 Rust 侧实现同名接口。
  */
 function boxesApi(dataDir: string): Plugin {
+  // SSE 客户端集合：数据目录一变（含本应用自己的写盘）就去抖广播一次，界面据此刷新（北极星：外部改动→刷新 ≤2s）
+  const sseClients = new Set<ServerResponse>()
   return {
     name: 'boxes-dev-api',
     configureServer(server) {
+      // 文件监听：递归 watch 数据目录，150ms 去抖后通知所有 SSE 客户端。
+      // 目录可能尚不存在（用户第一次跑）→ 先建；不支持递归或 watch 抛错时降级为「无自动刷新」，不崩。
+      let timer: ReturnType<typeof setTimeout> | null = null
+      let watcher: ReturnType<typeof fsWatch> | null = null
+      try {
+        mkdirSync(dataDir, { recursive: true })
+        watcher = fsWatch(dataDir, { recursive: true }, () => {
+          if (timer) return
+          timer = setTimeout(() => {
+            timer = null
+            for (const res of sseClients) {
+              try {
+                res.write('data: changed\n\n')
+              } catch {
+                sseClients.delete(res)
+              }
+            }
+          }, 150)
+        })
+      } catch {
+        watcher = null // 环境不支持监听：界面仍可手动刷新，仅失去自动
+      }
+      server.httpServer?.on('close', () => {
+        watcher?.close()
+        if (timer) clearTimeout(timer)
+        for (const res of sseClients) res.end()
+        sseClients.clear()
+      })
+
       server.middlewares.use('/api', (req, res) => {
         const send = (code: number, body: unknown) => {
           res.statusCode = code
@@ -154,6 +187,19 @@ function boxesApi(dataDir: string): Plugin {
         // GET /api/info : 数据目录与版本。界面 footer 显示它们，值必须来自这里（不许硬编码）
         if (req.method === 'GET' && /^\/info\/?$/.test(pathname)) {
           readVersions().then((v) => send(200, { dataDir, home: process.env.HOME ?? '', ...v }))
+          return
+        }
+
+        // GET /api/events : SSE 文件变更流。连接保持打开，数据目录一变就收到 `data: changed`，界面据此刷新。
+        if (req.method === 'GET' && /^\/events\/?$/.test(pathname)) {
+          res.writeHead(200, {
+            'Content-Type': 'text/event-stream; charset=utf-8',
+            'Cache-Control': 'no-cache, no-transform',
+            Connection: 'keep-alive',
+          })
+          res.write('retry: 1000\n\n')
+          sseClients.add(res)
+          req.on('close', () => sseClients.delete(res))
           return
         }
 

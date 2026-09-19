@@ -85,6 +85,11 @@ export interface BoxesApi {
   /** 平铺视图：全部 todo（inbox 日期倒序在前，任务按提出日倒序在后），各附来源 */
   listAll(): Promise<SourcedTodo[]>
   /**
+   * 订阅数据目录变更（SSE）。回调在任一变更后触发；返回取消订阅函数。
+   * 浏览器 EventSource 自带重连，出错静默即可。打包 Tauri 时换成原生文件监听。
+   */
+  subscribe(onChange: () => void): () => void
+  /**
    * 编辑一行 todo（双击行 → 内联编辑器保存）。
    * patch.text 改正文；start/done 改 @start/@done（`null` 清除，`undefined` 不动，状态由时间派生）；
    * target 改所在文件，与来源不同即整行移动过去。
@@ -196,6 +201,12 @@ const httpApi: BoxesApi = {
     const r = await fetch('/api/all')
     if (!r.ok) throw new Error(`listAll 失败：${r.status}`)
     return (await r.json()).todos
+  },
+  subscribe: (onChange) => {
+    const es = new EventSource('/api/events')
+    es.onmessage = () => onChange()
+    // 连接错误不处理：EventSource 会按 retry 自动重连，恢复后即恢复刷新
+    return () => es.close()
   },
   editTodo: async (source, id, patch) => {
     const r = await fetch('/api/todos/edit', {

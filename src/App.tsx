@@ -576,6 +576,20 @@ export default function App() {
     else loadTask(view.month, view.slug)
   }, [view])
 
+  // SSE 自动刷新（北极星：外部改动→界面 ≤2s）。订阅只建一次，靠 ref 读最新的
+  // refreshView / 编辑态（否则闭包陈旧）。正在编辑某行时不刷新，免得冲掉未保存的编辑器。
+  const liveRef = useRef({ refreshView, editingKey })
+  liveRef.current = { refreshView, editingKey }
+  useEffect(
+    () =>
+      api.subscribe(() => {
+        api.listDays().then(setDays).catch(() => {})
+        api.listTasks().then(setTasks).catch(() => {})
+        if (!liveRef.current.editingKey) liveRef.current.refreshView()
+      }),
+    [],
+  )
+
   // 点击 box：三态前进（todo→doing→done，done 停住）。
   // 接口按该行自己的来源分叉（平铺视图里 inbox 行与任务行混在一起）
   const cycleState = async (todo: SourcedTodo, index: number) => {
