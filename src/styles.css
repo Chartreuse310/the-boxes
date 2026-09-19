@@ -238,8 +238,10 @@ select {
 }
 
 .chip-done {
-  background: #dcfce7;
-  color: #15803d;
+  flex: none;
+  font-size: 12px;
+  color: #a8a29e;
+  margin-left: 6px;
 }
 
 .muted {

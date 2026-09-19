@@ -156,7 +156,7 @@ export default function App() {
                 <span className="text">{t.text}</span>
                 {t.task && <span className="chip chip-task">+{t.task}</span>}
                 {t.date && <span className="chip chip-date">@{t.date}</span>}
-                {t.doneDate && <span className="chip chip-done">done {t.doneDate}</span>}
+                {t.doneDate && <span className="chip chip-done">—— 完成于 {t.doneDate} 🎉</span>}
 
                 {t.id && (
                   <div className="menu-wrap">
