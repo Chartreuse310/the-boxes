@@ -136,4 +136,4 @@ the-boxes/                # 本仓库
 
 ## License
 
-MIT @ z —— the-boxes 是开源软件，欢迎使用、修改、提意见。
+[MIT](LICENSE) @ Chartreuse310 —— the-boxes 是开源软件，欢迎使用、修改、提意见。
