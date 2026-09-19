@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.5（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.6（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -293,6 +293,12 @@ h1 {
   padding: 0;
   border: 1.5px solid var(--text-secondary);
   border-radius: 50%;
+  /* 只为"进行中"的半填充圆服务：它按整个框的直径画（半径 9px > 内缘），
+     由这里的圆角裁到描边内缘。不这么做就得靠 calc 算内区尺寸，而描边宽度
+     在 DPR 1 会被 Chrome 吸附成 1px（实测 clientWidth 由 15 变 16），
+     算出来的圆会比内缘小 0.5px、露出细缝。用裁剪则任何 DPR 都严丝合缝。
+     不影响其它状态的符号：勾 12px、字形 7.2px 高，都在内区之内。 */
+  overflow: hidden;
   background: transparent;
   color: var(--text-secondary);
   font-size: var(--fs-label);
@@ -321,6 +327,9 @@ h1 {
 }
 
 /* 切换状态时的"落子"反馈：仅 scale + opacity，≤150ms */
+/* 由内容收缩包裹 —— 不要改成 width/height: 100%。
+   字形状态下"收缩包裹的盒子被 .box 居中"才是它们现在的位置；改成铺满会把
+   > 与 < 挪动约 0.2px（实测），使两个本来已定型的符号发生光栅化变化。 */
 .box-sym {
   display: inline-flex;
   align-items: center;
@@ -358,6 +367,21 @@ h1 {
   display: block;
   width: var(--fs-label);
   height: var(--fs-label);
+}
+
+/* 进行中的半填充圆是内联 SVG（几何与朝向在 App.tsx 的 DoingHalf 里）。
+   尺寸取**整个框的直径**（--checkbox-size），而不是框的内区：半径因此是 9px，
+   比描边内缘（7.5px）大，超出的部分由 .box 的 border-radius + overflow: hidden
+   裁掉 —— "贴合内缘"于是成了裁剪的副产品，不必知道描边到底有多宽。
+   尺寸与 --fs-label 无关：这个符号要和**外圈**对齐，不是和字形对齐。
+   只填不描：外圈已有 1.5px 圆环，再给这段弧描一笔会让这个状态的环变粗。
+   注意：SVG 比框的内区大，靠 flex 居中溢出到描边下面（左右各 1.5px），
+   所以 .box 的 overflow: hidden 不是可选项，去掉就会盖住外圈。 */
+.box-half {
+  display: block;
+  flex: none;
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
 }
 
 /* ---------- 迁移菜单 ---------- */

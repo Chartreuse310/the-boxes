@@ -10,11 +10,10 @@ function today(): string {
 }
 
 /** 状态 → box 内字形（the-boxes 的品牌就是这五个盒子）
- *  done 不在表内：它不用字形，改由 <DoneCheck /> 矢量绘制（见下）。
- *  类型上直接排除 done，而不是留一个用不到的 '✓' —— 免得后来者以为改这里能改勾。 */
-const STATE_SYMBOL: Record<Exclude<TodoState, 'done'>, string> = {
+ *  done / doing 不在表内：它们不用字形，改由矢量绘制（<DoneCheck /> / <DoingHalf />，见下）。
+ *  类型上直接排除这两个状态，而不是留一个用不到的 '✓' '/' —— 免得后来者以为改这里能改符号。 */
+const STATE_SYMBOL: Record<Exclude<TodoState, 'done' | 'doing'>, string> = {
   todo: '',
-  doing: '/',
   deferred: '>',
   scheduled: '<',
 }
@@ -70,6 +69,51 @@ function DoneCheck() {
     </svg>
   )
 }
+
+/**
+ * 进行中：半填充圆 —— 一个圆被 45° 的 `/` 分成两半，左上那半填满、右下留空。
+ *
+ * 方向依据：填的是"先到"的那半。列表阅读方向是左→右、上→下，进度条
+ * （`.bar-fill`）也是从左端起填，所以半填充取左上而不是右下。
+ * 等价说法：Unicode ◐「左半实心」整体顺时针转 45°，实心部分就落在左上。
+ *
+ * 为什么不用渐变做半填充：渐变要额外引入一个色值（v0.2 的 `--c-doing-tint`
+ * 就是因此被删）。这里用真实的矢量半圆盘，颜色仍是外圈那个 `currentColor`，
+ * §4.2「五个状态只有完成有颜色」因此不被打破 —— 被禁的是"用渐变"，不是"半填充"。
+ *
+ * 为什么只填、不描边：
+ * - 外圈已经提供了 1.5px 的圆环。若再把这段弧描一笔（0.9px），这个状态的环
+ *   会变成约 1.95px，比其他四个状态粗一圈，是最容易露馅的那种"偏心"。
+ * - 分割线也不必另画一笔：它就是半圆盘的直边，与外圈同色，画了也看不出来。
+ *
+ * 几何：viewBox 取**单位圆**（2×2，圆心 (1,1)，半径 1），于是这个符号与
+ * 状态框的具体像素尺寸彻底解耦 —— 大小只由 CSS 给（`.box-half` 取
+ * `--checkbox-size`，即半径 1 = 框外缘 9px）。半径取到外缘是有意的：
+ * 超出的那部分由 `.box` 的 border-radius + overflow: hidden 裁掉，
+ * "贴合描边内缘"因此是裁剪的副产品，不必知道描边究竟多宽。
+ * （若改成按内区尺寸画，会撞上描边宽度被设备像素吸附：DPR 1 时 1.5px 被
+ * Chrome 吸附成 1px，内区由 15px 变 16px，半圆就比内缘小 0.5px 而露缝。）
+ * 45° 斜杠的两端在圆上，坐标轴投影为 1/√2 ≈ 0.7071：
+ *   左下端点 (1 − 0.7071, 1 + 0.7071) = (0.2929, 1.7071)
+ *   右上端点 (1 + 0.7071, 1 − 0.7071) = (1.7071, 0.2929)
+ * 弧从左上绕过去（sweep=1 = 屏幕上顺时针：135° → 180° → 270° → 315°），
+ * 正好经过"左"与"上"两个点，即左上那半。实测量得填充跨 135.00°→315.00°。
+ */
+const HALF_ARC = 'M 0.2929 1.7071 A 1 1 0 0 1 1.7071 0.2929 Z'
+
+function DoingHalf() {
+  return (
+    <svg
+      className="box-half"
+      viewBox="0 0 2 2"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d={HALF_ARC} fill="currentColor" />
+    </svg>
+  )
+}
+
 /** 点击三态循环：只走到完成，停在 [x]，不回环 */
 const STATE_CYCLE: TodoState[] = ['todo', 'doing', 'done']
 
@@ -277,7 +321,13 @@ export default function App() {
                   aria-label={boxAriaLabel(t.state)}
                 >
                   <span className="box-sym" key={t.state}>
-                    {t.state === 'done' ? <DoneCheck /> : STATE_SYMBOL[t.state]}
+                    {t.state === 'done' ? (
+                      <DoneCheck />
+                    ) : t.state === 'doing' ? (
+                      <DoingHalf />
+                    ) : (
+                      STATE_SYMBOL[t.state]
+                    )}
                   </span>
                 </button>
                 <span className="text">
