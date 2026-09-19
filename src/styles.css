@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.20（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.21（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -548,15 +548,17 @@ h1 {
 /* 编辑是瞬时态：整行改为纵向表单。描述与位置复用添加框的 .add-line / .add-input /
    .add-target / .at-menu（与「输入 todo」视觉一致）。控件一律 surface 底 +
    border-control 描边 + :focus 环；主按钮用 --accent 文本/描边，不叠白、不引新色。 */
-.todo-editing {
+/* 编辑行整块转纵向表单。用 li.todo.todo-editing 抬特异度：`.todo`/`.todo + .todo::before`/
+   `.todo:hover` 定义在更靠后，普通单类会盖掉这里的 display/hover/分隔线，导致右侧留白。 */
+li.todo.todo-editing {
   display: block;
   cursor: default;
 }
-.todo-editing::before {
+li.todo.todo-editing::before {
   display: none; /* 编辑行不画缩进分隔线 */
 }
-.todo-editing:hover {
-  background: none;
+li.todo.todo-editing:hover {
+  background: transparent;
 }
 .edit {
   display: flex;
@@ -649,27 +651,13 @@ h1 {
   justify-content: flex-end;
   gap: 12px;
 }
-/* 状态按钮：点按循环 待办/进行中/完成，底层写开始·完成日期。盒图标 + 中文名。 */
-.status-btn {
+/* 状态只读展示：盒图标（各态自带色）+ 中文名，随起止时间派生。非按钮、不可点。 */
+.edit-status {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font: inherit;
+  gap: 8px;
   font-size: var(--fs-label);
-  color: var(--text);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-control);
-  border-radius: var(--radius-control);
-  padding: 4px 10px 4px 6px;
-  cursor: pointer;
-}
-.status-btn:hover {
-  background: var(--bg-hover);
-}
-.status-btn:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-focus);
+  color: var(--text-secondary);
 }
 /* 所在文件独占一行：输入框吃满剩余宽度 */
 .edit-loc-field {

@@ -404,17 +404,6 @@ function TodoEditor(props: {
   const derived: TodoState = done ? 'done' : start ? 'doing' : 'todo'
   const locId = `loc-${todo.id ?? 'new'}`
 
-  // 状态切换：点按沿 待办→进行中→完成→待办 循环，底层只动开始/完成日期（日期仍是事实源）。
-  // 进行中补今天为开始；完成补今天为完成（保留开始）；回到待办清空两者。
-  const cycleStatus = () => {
-    if (derived === 'todo') setStart((s) => s || today())
-    else if (derived === 'doing') setDone((d) => d || today())
-    else {
-      setStart('')
-      setDone('')
-    }
-  }
-
   const save = async () => {
     if (!todo.id) return
     try {
@@ -469,19 +458,14 @@ function TodoEditor(props: {
             </button>
           )}
         </label>
-        <button
-          type="button"
-          className="status-btn"
-          onClick={cycleStatus}
-          aria-label={`状态：${STATE_LABEL[derived]}，点按切换待办 / 进行中 / 完成`}
-        >
+        <span className="edit-status" aria-label={`状态：${STATE_LABEL[derived]}`}>
           <span className={'box box-' + derived} aria-hidden>
             <span className="box-sym">
               {derived === 'done' ? <DoneCheck /> : derived === 'doing' ? <DoingHalf /> : null}
             </span>
           </span>
           {STATE_LABEL[derived]}
-        </button>
+        </span>
       </div>
 
       {/* 第三行：所在文件（可输入下拉单选：选已有 / 输入新名建任务 / 清空回当日） */}
