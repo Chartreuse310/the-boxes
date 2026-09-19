@@ -155,7 +155,16 @@ export default function App() {
                 </button>
                 <span className="text">
                   {t.text}
-                  {t.doneDate && <span className="done-note">—— 完成于 {t.doneDate} 🎉</span>}
+                  {t.startDate && (
+                    <span className="done-note">
+                      {' '}
+                      —— 始于 {t.startDate} 🛫
+                      {t.doneDate && <>，完成于 {t.doneDate} 🎉</>}
+                    </span>
+                  )}
+                  {!t.startDate && t.doneDate && (
+                    <span className="done-note"> —— 完成于 {t.doneDate} 🎉</span>
+                  )}
                 </span>
                 {t.task && <span className="chip chip-task">+{t.task}</span>}
                 {t.date && <span className="chip chip-date">@{t.date}</span>}

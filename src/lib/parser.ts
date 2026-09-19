@@ -8,6 +8,7 @@ export interface Todo {
   state: TodoState
   text: string
   date: string | null // @YYYY-MM-DD（[<] 排期必填）
+  startDate: string | null // @start:YYYY-MM-DD（[/] 开始日期）
   doneDate: string | null // @done:YYYY-MM-DD
   task: string | null // +任务slug
 }
@@ -22,6 +23,7 @@ const STATE_SYMBOLS: Record<string, TodoState> = {
 
 const LINE_RE = /^-\s\[([ x/<>])\]\s+(.*)$/
 const ID_RE = /\s\^([a-z0-9]+)\b/i
+const START_RE = /\s@start:(\d{4}-\d{2}-\d{2})\b/
 const DONE_RE = /\s@done:(\d{4}-\d{2}-\d{2})\b/
 const DATE_RE = /\s@(\d{4}-\d{2}-\d{2})\b/
 const TASK_RE = /\s\+([^\s+@^]+)/
@@ -44,11 +46,12 @@ export function parseInbox(markdown: string): Todo[] {
       return t[1]
     }
     const id = take(ID_RE)
+    const startDate = take(START_RE)
     const doneDate = take(DONE_RE)
     const date = take(DATE_RE)
     const task = take(TASK_RE)
 
-    todos.push({ id, state, text: rest.trim(), date, doneDate, task })
+    todos.push({ id, state, text: rest.trim(), date, startDate, doneDate, task })
   }
   return todos
 }
