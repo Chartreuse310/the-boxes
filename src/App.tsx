@@ -359,9 +359,8 @@ function MiniCalendar(props: {
   )
 }
 
-/** 编辑态目标 AddTarget → 接口用 TodoSource（newTask 落当前月新任务文件）。null = 不移动。 */
-function resolveTarget(loc: AddTarget | null): TodoSource | null {
-  if (!loc) return null
+/** 编辑态目标 AddTarget → 接口用 TodoSource（newTask 落当前月新任务文件）。 */
+function resolveTarget(loc: AddTarget): TodoSource {
   if (loc.kind === 'day') return { kind: 'day', date: loc.date }
   if (loc.kind === 'task') return { kind: 'task', month: loc.month, slug: loc.slug }
   return { kind: 'task', month: today().slice(0, 7), slug: loc.name }
@@ -371,6 +370,12 @@ function resolveTarget(loc: AddTarget | null): TodoSource | null {
 function sourceName(source: TodoSource, tasks: TaskSummary[]): string {
   if (source.kind === 'day') return source.date
   return tasks.find((t) => t.month === source.month && t.slug === source.slug)?.title || source.slug
+}
+
+/** 来源 → 初始位置目标（编辑器打开时胶囊即显示当前文件） */
+function sourceToTarget(source: TodoSource, tasks: TaskSummary[]): AddTarget {
+  if (source.kind === 'day') return { kind: 'day', date: source.date }
+  return { kind: 'task', month: source.month, slug: source.slug, title: sourceName(source, tasks) }
 }
 
 /**
@@ -388,7 +393,8 @@ function TodoEditor(props: {
   const [text, setText] = useState(todo.text)
   const [start, setStart] = useState(todo.startDate ?? '')
   const [done, setDone] = useState(todo.doneDate ?? '')
-  const [loc, setLoc] = useState<AddTarget | null>(null)
+  // 位置：打开即显示当前所在文件；`@` 换一项替换之；`×` 删除掉回当日（与添加框一致）
+  const [loc, setLoc] = useState<AddTarget>(() => sourceToTarget(todo.source, tasks))
   const [locDraft, setLocDraft] = useState('')
   const [locActive, setLocActive] = useState(0)
   const locRef = useRef<HTMLInputElement | null>(null)
@@ -399,6 +405,7 @@ function TodoEditor(props: {
   const activeIdx = menuShown ? Math.min(locActive, candidates.length - 1) : 0
 
   const derived: TodoState = done ? 'done' : start ? 'doing' : 'todo'
+  const clearedTarget: AddTarget = { kind: 'day', date: today() } // × 后落当日
 
   const pickLoc = (c: AtCand) => {
     setLoc(c.target)
@@ -425,13 +432,12 @@ function TodoEditor(props: {
 
   const save = async () => {
     if (!todo.id) return
-    const target = resolveTarget(loc)
     try {
       await api.editTodo(todo.source, todo.id, {
         text,
         start: start || null,
         done: done || null,
-        ...(target ? { target } : {}),
+        target: resolveTarget(loc), // 与当前来源相同则服务端原地保存，否则整行移动
       })
     } catch {
       return // 保存失败：留在编辑态，不吞输入
@@ -441,14 +447,10 @@ function TodoEditor(props: {
 
   return (
     <div className="edit" onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel() } }}>
-      <div className="edit-line">
-        <span className={'box box-' + derived} aria-hidden>
-          <span className="box-sym">
-            {derived === 'done' ? <DoneCheck /> : derived === 'doing' ? <DoingHalf /> : null}
-          </span>
-        </span>
+      {/* 描述：全宽，复用添加框控件外观（surface + border-control + focus-within 环） */}
+      <div className="add-line">
         <input
-          className="edit-text"
+          className="add-input"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
@@ -462,40 +464,22 @@ function TodoEditor(props: {
           aria-label="描述"
         />
       </div>
-      <div className="edit-fields">
-        <label className="edit-field">
-          <span className="edit-cap">开始</span>
-          <input type="date" value={start} onChange={(e) => setStart(e.target.value)} aria-label="开始日期" />
-          {start && (
-            <button type="button" className="edit-clear" onClick={() => setStart('')} aria-label="清除开始日期">
-              ×
-            </button>
-          )}
-        </label>
-        <label className="edit-field">
-          <span className="edit-cap">完成</span>
-          <input type="date" value={done} onChange={(e) => setDone(e.target.value)} aria-label="完成日期" />
-          {done && (
-            <button type="button" className="edit-clear" onClick={() => setDone('')} aria-label="清除完成日期">
-              ×
-            </button>
-          )}
-        </label>
-      </div>
-      <div className="loc-wrap">
+
+      {/* 位置：前面直接显示当前文件胶囊，×→当日，@→替换（与添加框同款下拉） */}
+      <div className="loc-bar">
         <div className="add-line">
-          {loc ? (
-            <button type="button" className="add-target" onClick={() => setLoc(null)} aria-label="恢复原位置">
-              <span className="add-target-x" aria-hidden>
-                ×
-              </span>
-              {targetLabel(loc)}
-            </button>
-          ) : (
-            <span className="loc-cur">
-              {sourceName(todo.source, tasks)}
+          <button
+            type="button"
+            className="add-target"
+            onClick={() => setLoc(clearedTarget)}
+            title="删除位置 = 掉到当日"
+            aria-label={`所在位置：${targetLabel(loc)}，点击掉到当日`}
+          >
+            <span className="add-target-x" aria-hidden>
+              ×
             </span>
-          )}
+            {targetLabel(loc)}
+          </button>
           <input
             ref={locRef}
             className="add-input"
@@ -506,7 +490,7 @@ function TodoEditor(props: {
               setLocActive(0)
             }}
             onKeyDown={onLocKey}
-            placeholder={loc ? '@ 换到别处' : '@ 移到任务 / 日期'}
+            placeholder="@ 换到任务 / 日期"
             aria-label="所在位置"
             autoComplete="off"
           />
@@ -532,6 +516,34 @@ function TodoEditor(props: {
           </ul>
         )}
       </div>
+
+      {/* 起止时间 + 派生态预览（盒子挪到此处，不挤占描述宽度） */}
+      <div className="edit-fields">
+        <span className={'box box-' + derived} aria-hidden title={STATE_LABEL[derived]}>
+          <span className="box-sym">
+            {derived === 'done' ? <DoneCheck /> : derived === 'doing' ? <DoingHalf /> : null}
+          </span>
+        </span>
+        <label className="edit-field">
+          <span className="edit-cap">开始</span>
+          <input type="date" value={start} onChange={(e) => setStart(e.target.value)} aria-label="开始日期" />
+          {start && (
+            <button type="button" className="edit-clear" onClick={() => setStart('')} aria-label="清除开始日期">
+              ×
+            </button>
+          )}
+        </label>
+        <label className="edit-field">
+          <span className="edit-cap">完成</span>
+          <input type="date" value={done} onChange={(e) => setDone(e.target.value)} aria-label="完成日期" />
+          {done && (
+            <button type="button" className="edit-clear" onClick={() => setDone('')} aria-label="清除完成日期">
+              ×
+            </button>
+          )}
+        </label>
+      </div>
+
       <div className="edit-actions">
         <span className="edit-hint">{STATE_LABEL[derived]}</span>
         <div className="edit-btns">

@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.14（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.15（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -522,8 +522,9 @@ h1 {
 }
 
 /* ---------- 行内编辑器（双击行进入，style-guide §5.7）---------- */
-/* 编辑是瞬时态：整行改为纵向表单。控件一律 surface 底 + border-control 描边 +
-   radius-control + :focus 环；主按钮用 --accent 文本/描边，不引入新色、不叠白。 */
+/* 编辑是瞬时态：整行改为纵向表单。描述与位置复用添加框的 .add-line / .add-input /
+   .add-target / .at-menu（与「输入 todo」视觉一致）。控件一律 surface 底 +
+   border-control 描边 + :focus 环；主按钮用 --accent 文本/描边，不叠白、不引新色。 */
 .todo-editing {
   display: block;
   cursor: default;
@@ -539,42 +540,23 @@ h1 {
   flex-direction: column;
   gap: 10px;
 }
-.edit-line {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-/* 预览态的 box 是静态标记，去掉按钮态的悬停缩放（底色沿用各态自身） */
-.edit-line .box {
-  cursor: default;
-}
-.edit-line .box:not(:disabled):hover {
-  transform: none;
-}
-.edit-text {
-  flex: 1;
-  min-width: 0;
-  font: inherit;
-  font-size: var(--fs-body);
-  color: var(--text);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-control);
-  border-radius: var(--radius-control);
-  padding: 8px 12px;
-}
-.edit-text::placeholder {
-  color: var(--text-secondary);
-}
-.edit-text:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-focus);
+/* 位置行的下拉锚点 */
+.loc-bar {
+  position: relative;
 }
 
 .edit-fields {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px 16px;
+}
+/* 派生态预览：静态标记，去掉按钮态的悬停缩放（底色沿用各态自身） */
+.edit .box {
+  cursor: default;
+}
+.edit .box:not(:disabled):hover {
+  transform: none;
 }
 .edit-field {
   display: inline-flex;
@@ -617,25 +599,6 @@ h1 {
 .edit-clear:hover {
   color: var(--text);
   background: var(--bg-hover);
-}
-
-.loc-wrap {
-  position: relative;
-}
-/* 当前所在文件的静态标签（非按钮），与 add-target 同底色 */
-.loc-cur {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  max-width: 45%;
-  font-size: var(--fs-label);
-  color: var(--text-secondary);
-  background: var(--bg-sunken);
-  border-radius: var(--radius-control);
-  padding: 3px 8px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .edit-actions {
