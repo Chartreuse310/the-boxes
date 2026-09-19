@@ -147,7 +147,7 @@ export default function App() {
   const [selected, setSelected] = useState<string | null>(null)
   const [todos, setTodos] = useState<Todo[] | null>(null)
   const dragIndex = useRef<number | null>(null)
-  // 悬停迁移菜单：记录当前打开的 todo id 及其"迁移到以后"是否在选日期
+  // 迁移菜单：记录当前打开的 todo id 及其"迁移到以后"是否在选日期
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [pickingDate, setPickingDate] = useState<string | null>(null)
   // 运行环境信息（数据目录 / 版本）：只用于 footer。取不到就不显示那一段，不阻塞界面。
@@ -183,6 +183,20 @@ export default function App() {
     setOpenMenu(null)
     setPickingDate(null)
   }, [selected])
+
+  // 菜单只在外部点击时关闭。不能用 mouseleave：浮层与行之间有 4px 间隙，
+  // 鼠标穿行时已离开 li 的 DOM 子树会误关；且 <input type="date"> 的原生
+  // 日历弹层不属于页面 DOM，鼠标移上去同样触发 mouseleave——日期根本点不到。
+  useEffect(() => {
+    if (openMenu === null) return
+    const onDown = (e: MouseEvent) => {
+      if ((e.target as Element | null)?.closest('.menu-wrap')) return
+      setOpenMenu(null)
+      setPickingDate(null)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [openMenu])
 
   // 点击 box：三态前进（todo→doing→done，done 停住）
   const cycleState = async (todo: Todo, index: number) => {
@@ -312,7 +326,6 @@ export default function App() {
                 onDragStart={() => (dragIndex.current = i)}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => onDrop(i)}
-                onMouseLeave={() => setOpenMenu(null)}
               >
                 <button
                   className={`box box-${t.state}`}
