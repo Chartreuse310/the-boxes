@@ -1,7 +1,30 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
-import { readdir, readFile } from 'node:fs/promises'
+import { readdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import {
+  ensureIds,
+  ensureInboxDir,
+  reorder,
+  setState,
+  type TodoState,
+} from './server/store'
+
+/** 某日文件是否存在 */
+async function dayExistsFor(dataDir: string, date: string): Promise<boolean> {
+  try {
+    await readFile(path.join(dataDir, 'inbox', `${date}.md`), 'utf8')
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** 某日文件不存在时，生成空文件（含标题 + 空行占位） */
+async function touchDay(dataDir: string, date: string): Promise<void> {
+  await ensureInboxDir(dataDir)
+  await writeFile(path.join(dataDir, 'inbox', `${date}.md`), `# ${date}\n\n`)
+}
 
 /**
  * 数据目录的解析优先级（由高到低）：
@@ -36,6 +59,27 @@ function boxesApi(dataDir: string): Plugin {
           res.setHeader('Content-Type', 'application/json; charset=utf-8')
           res.end(JSON.stringify(body))
         }
+        // 读取 JSON 请求体
+        const readBody = (): Promise<Record<string, unknown>> =>
+          new Promise((resolve, reject) => {
+            let raw = ''
+            req.on('data', (c) => (raw += c))
+            req.on('end', () => {
+              try {
+                resolve(raw ? JSON.parse(raw) : {})
+              } catch {
+                reject(new Error('请求体不是合法 JSON'))
+              }
+            })
+            req.on('error', reject)
+          })
+        const handle = async (fn: () => Promise<unknown>) => {
+          try {
+            send(200, await fn())
+          } catch (e) {
+            send(400, { error: e instanceof Error ? e.message : '失败' })
+          }
+        }
 
         const pathname = (req.url ?? '/').split('?')[0]
 
@@ -58,6 +102,45 @@ function boxesApi(dataDir: string): Plugin {
           readFile(path.join(dataDir, 'inbox', `${m[1]}.md`), 'utf8')
             .then((content) => send(200, { date: m[1], content }))
             .catch(() => send(404, { error: 'not found' }))
+          return
+        }
+
+        // —— 写操作 ——
+        // PUT /api/days/:date/ensure-ids : 给缺失 id 的 todo 补 `^xxxx`
+        const mt = pathname.match(/^\/days\/(\d{4}-\d{2}-\d{2})\/ensure-ids$/)
+        if (req.method === 'PUT' && mt) {
+          handle(async () => {
+            if (!(await dayExistsFor(dataDir, mt[1]))) await touchDay(dataDir, mt[1])
+            await ensureIds(dataDir, mt[1])
+            const content = await readFile(path.join(dataDir, 'inbox', `${mt[1]}.md`), 'utf8')
+            return { content }
+          })
+          return
+        }
+
+        // PUT /api/days/:date/todos/:id/state : 修改某 todo 状态
+        const ms = pathname.match(/^\/days\/(\d{4}-\d{2}-\d{2})\/todos\/([a-z0-9]+)\/state$/)
+        if (req.method === 'PUT' && ms) {
+          handle(async () => {
+            const body = await readBody()
+            const state = String(body.state ?? '')
+            const allowed = ['todo', 'doing', 'done', 'deferred', 'scheduled']
+            if (!allowed.includes(state)) throw new Error(`非法状态：${state}`)
+            await setState(dataDir, ms[1], ms[2], state as TodoState)
+            return { ok: true }
+          })
+          return
+        }
+
+        // PUT /api/days/:date/reorder : 按给定 id 顺序重排
+        const mr = pathname.match(/^\/days\/(\d{4}-\d{2}-\d{2})\/reorder$/)
+        if (req.method === 'PUT' && mr) {
+          handle(async () => {
+            const body = await readBody()
+            const order = (body.order as string[]) ?? []
+            await reorder(dataDir, mr[1], order)
+            return { ok: true }
+          })
           return
         }
 

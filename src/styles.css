@@ -93,6 +93,13 @@ select {
   flex: 1;
 }
 
+.todo[draggable="true"] {
+  cursor: grab;
+}
+.todo[draggable="true"]:active {
+  cursor: grabbing;
+}
+
 .todo-done .text {
   text-decoration: line-through;
   color: #a8a29e;
@@ -112,6 +119,18 @@ select {
   line-height: 1;
   color: #78716c;
   user-select: none;
+  background: #fff;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.06s, background 0.12s;
+}
+.box:not(:disabled):hover {
+  background: #f5f5f4;
+  transform: scale(1.08);
+}
+.box:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .box-done {
