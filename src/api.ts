@@ -84,11 +84,12 @@ export interface BoxesApi {
   taskReorder(month: string, slug: string, order: string[]): Promise<void>
   /** 平铺视图：全部 todo（inbox 日期倒序在前，任务按提出日倒序在后），各附来源 */
   listAll(): Promise<SourcedTodo[]>
-  /**
-   * 订阅数据目录变更（SSE）。回调在任一变更后触发；返回取消订阅函数。
-   * 浏览器 EventSource 自带重连，出错静默即可。打包 Tauri 时换成原生文件监听。
-   */
+  /** 订阅数据目录变更（SSE）…… */
   subscribe(onChange: () => void): () => void
+  /** 示例是否仍在（决定「清空示例」按钮显隐） */
+  getOnboarding(): Promise<{ present: boolean; files: string[] }>
+  /** 清空上手示例（删示例文件、标记已处理，下次开不再自动铺） */
+  clearOnboarding(): Promise<void>
   /**
    * 编辑一行 todo（双击行 → 内联编辑器保存）。
    * patch.text 改正文；start/done 改 @start/@done（`null` 清除，`undefined` 不动，状态由时间派生）；
@@ -207,6 +208,15 @@ const httpApi: BoxesApi = {
     es.onmessage = () => onChange()
     // 连接错误不处理：EventSource 会按 retry 自动重连，恢复后即恢复刷新
     return () => es.close()
+  },
+  getOnboarding: async () => {
+    const r = await fetch('/api/onboarding')
+    if (!r.ok) throw new Error(`getOnboarding 失败：${r.status}`)
+    return r.json()
+  },
+  clearOnboarding: async () => {
+    const r = await fetch('/api/onboarding/clear', { method: 'POST' })
+    if (!r.ok) throw new Error(`clearOnboarding 失败：${r.status} ${await r.text()}`)
   },
   editTodo: async (source, id, patch) => {
     const r = await fetch('/api/todos/edit', {

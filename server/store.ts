@@ -2,7 +2,7 @@
 // 定位策略：按行尾 `^id` 精确定位；手写行无 id 时，先 ensureIds 补齐。
 // 容错规则（SPEC §7）：非 todo 行原样保留，绝不重写无关内容。
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, readdir, unlink } from 'node:fs/promises'
 import path from 'node:path'
 import { parseInbox } from '../src/lib/parser'
 
@@ -457,4 +457,114 @@ export async function updateTodo(
     srcLines.splice(srcIdx, 1)
     await writeFile(srcFile, srcLines.join('\n'))
   }
+}
+
+// —— 上手示例（onboarding）：空目录首次打开自动铺一份自解释的示例数据，界面可一键清空 ——
+// 标记文件记在数据目录根，扫描 inbox/tasks 时不会读到它；有它 = 已处理过（含"已清空"），故不再重铺。
+
+const ONBOARDING_FILE = '.boxes-onboarding.json'
+
+interface OnboardingMarker {
+  seeded: true
+  files: string[] // 相对数据目录的示例文件路径（清空时逐个删；已清空则为 []）
+}
+
+async function readMarker(dataDir: string): Promise<OnboardingMarker | null> {
+  try {
+    return JSON.parse(await readFile(path.join(dataDir, ONBOARDING_FILE), 'utf8')) as OnboardingMarker
+  } catch {
+    return null
+  }
+}
+
+async function writeMarker(dataDir: string, files: string[]): Promise<void> {
+  await writeFile(dataDir.length ? path.join(dataDir, ONBOARDING_FILE) : ONBOARDING_FILE, JSON.stringify({ seeded: true, files }))
+}
+
+/** 数据目录里是否一个 todo 文件都没有（inbox 日文件 / 任务文件皆无）。 */
+async function isEmptyStore(dataDir: string): Promise<boolean> {
+  try {
+    const inbox = await readdir(path.join(dataDir, 'inbox'))
+    if (inbox.some((f) => DAY_RE.test(f.replace(/\.md$/, '')))) return false
+  } catch {
+    /* inbox 不存在 = 无 */
+  }
+  try {
+    const months = await readdir(path.join(dataDir, 'tasks'), { withFileTypes: true })
+    for (const m of months) {
+      if (!m.isDirectory() || !/^\d{4}-\d{2}$/.test(m.name)) continue
+      const files = await readdir(path.join(dataDir, 'tasks', m.name))
+      if (files.some((f) => f.endsWith('.md'))) return false
+    }
+  } catch {
+    /* tasks 不存在 = 无 */
+  }
+  return true
+}
+
+/** 生成示例文件的 Markdown（不含 ^id，落盘后由 ensureIdsInFile 补，保证可编辑/可拖）。 */
+function onboardingFiles(dataDir: string): { rel: string; abs: string; content: string }[] {
+  const today = localDate()
+  const month = today.slice(0, 7)
+  const slug = '示例任务'
+  const dayRel = `inbox/${today}.md`
+  const taskRel = `tasks/${month}/${slug}.md`
+  const day =
+    `# ${today}\n\n` +
+    `下面几条是**示例**，随手点点就能学会；点顶部「清空示例」可一键清掉、从你自己的第一条开始。` +
+    `数据就是你自己的 Markdown 文件，用任何编辑器改 \`inbox/\`、\`tasks/\` 都会自动反映到界面。\n\n` +
+    `- [ ] 点左边的圆圈：待办 → 进行中 → 完成（完成会自动记下日期）\n` +
+    `- [/] 双击这一行：能改文字、改开始/完成时间、还能把它挪到别的文件 @start:${today}\n` +
+    `- [x] 这条已经完成了 @done:${today}\n` +
+    `- [ ] 把我拖到左边日历里的另一天，就挪到那天去了\n` +
+    `- [ ] 上方输入框敲一行回车即可添加；想归进某个任务就 @ 选一个（没有就现建）\n`
+  const task =
+    `# 任务：${slug}\n\n` +
+    `**目标**：这是示例任务，点左下任务卡片即进任务视图（按文件归属，示例可清空）\n` +
+    `**状态**：进行中\n` +
+    `**提出**：${today}\n\n` +
+    `## todos\n\n` +
+    `- [ ] 任务 = 一组相关 todo + 一个目标，比清单重、比项目轻\n` +
+    `- [ ] 这个 todo 就存在 \`tasks/${month}/${slug}.md\` 里，改文件即改这里\n` +
+    `- [ ] 任务里的 todo 也能点状态、双击编辑、组内拖动排序\n`
+  return [
+    { rel: dayRel, abs: inboxPath(dataDir, today), content: day },
+    { rel: taskRel, abs: taskPath(dataDir, month, slug), content: task },
+  ]
+}
+
+/** 若目录是空的（且没处理过）→ 铺示例，返回是否铺了。有数据或已处理过则不铺。 */
+export async function seedOnboardingIfEmpty(dataDir: string): Promise<boolean> {
+  if (await readMarker(dataDir)) return false // 已铺过或已清空：不再打扰
+  if (!(await isEmptyStore(dataDir))) {
+    await writeMarker(dataDir, []) // 用户已有真实数据：标记为已处理，永不自动铺
+    return false
+  }
+  await ensureInboxDir(dataDir)
+  const written: string[] = []
+  for (const f of onboardingFiles(dataDir)) {
+    await mkdir(path.dirname(f.abs), { recursive: true })
+    await writeFile(f.abs, f.content)
+    await ensureIdsInFile(f.abs) // 给示例行补 ^id，使其可点/可编辑/可拖
+    written.push(f.rel)
+  }
+  await writeMarker(dataDir, written)
+  return true
+}
+
+/** 删除示例文件并把标记置空（保持标记存在 → 下次开不再自动铺）。 */
+export async function clearOnboarding(dataDir: string): Promise<void> {
+  const marker = await readMarker(dataDir)
+  if (!marker) return
+  for (const rel of marker.files) {
+    await unlink(path.join(dataDir, rel)).catch(() => {})
+  }
+  await writeMarker(dataDir, [])
+}
+
+/** 界面用：示例是否仍在（决定「清空示例」按钮是否显示）。 */
+export async function getOnboarding(dataDir: string): Promise<{ present: boolean; files: string[] }> {
+  const marker = await readMarker(dataDir)
+  const files = marker?.files ?? []
+  return { present: files.length > 0, files }
 }

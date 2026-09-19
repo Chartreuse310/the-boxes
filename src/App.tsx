@@ -525,6 +525,8 @@ export default function App() {
   const inputRef = useRef<HTMLInputElement | null>(null)
   // 正在编辑的行的 key（source+id），null = 无。双击行进入，保存/取消退出。
   const [editingKey, setEditingKey] = useState<string | null>(null)
+  // 上手示例是否仍在（决定顶部「清空示例」横幅显隐）。启动播种在服务器侧完成，这里只查状态。
+  const [demoActive, setDemoActive] = useState(false)
 
   const loadDay = async (date: string) => {
     const day = await api.getDay(date)
@@ -596,6 +598,24 @@ export default function App() {
       }),
     [],
   )
+
+  // 示例是否还在（启动播种已在服务器侧完成）→ 决定横幅显隐
+  useEffect(() => {
+    api.getOnboarding().then((o) => setDemoActive(o.present)).catch(() => setDemoActive(false))
+  }, [])
+
+  // 清空示例：删文件 → 标记已处理（不再自动铺）→ 重载列表与当前视图、收起横幅
+  const clearDemo = async () => {
+    try {
+      await api.clearOnboarding()
+    } catch {
+      return
+    }
+    setDemoActive(false)
+    api.listDays().then(setDays).catch(() => {})
+    api.listTasks().then(setTasks).catch(() => {})
+    refreshView()
+  }
 
   // 点击 box：三态前进（todo→doing→done，done 停住）。
   // 接口按该行自己的来源分叉（平铺视图里 inbox 行与任务行混在一起）
@@ -896,6 +916,17 @@ export default function App() {
         </aside>
 
         <main>
+        {/* 上手示例横幅：仅示例数据仍在时出现，一键清空后不再显示 */}
+        {demoActive && (
+          <div className="demo-note" role="note">
+            <span className="demo-note-text">
+              下面是<strong>示例数据</strong>，随便点、改、拖来试；上手后一键清掉，从你自己的第一条开始。
+            </span>
+            <button type="button" className="btn" onClick={clearDemo}>
+              清空示例
+            </button>
+          </div>
+        )}
         {/* 添加框（默认平铺 / 某日视图）：`@` 唤起文件下拉（任务 + 日期），选中即把新行
             路由到该文件；无匹配可「创建任务」。归属由所在文件决定。任务视图不显示。 */}
         {(view?.kind === 'all' || view?.kind === 'day') && (

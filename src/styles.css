@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.16（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.17（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -406,6 +406,29 @@ h1 {
   font-size: var(--fs-meta);
   color: var(--text-secondary);
   margin: 0;
+}
+
+/* ---------- 上手示例横幅（style-guide §5.8）---------- */
+/* 瞬时通知条：--bg-surface 底 + --divider 描边（非控件，故不用 border-control）。
+   内嵌的「清空示例」是 .btn，其 border-control 落在 surface 上（≥3:1 达标，§2.1）。 */
+.demo-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-control);
+  padding: 8px 12px;
+  margin-bottom: 12px;
+}
+.demo-note-text {
+  font-size: var(--fs-label);
+  color: var(--text-secondary);
+}
+.demo-note-text strong {
+  color: var(--text);
+  font-weight: 600;
 }
 
 /* ---------- 添加框（all / day 视图，主区顶部）---------- */

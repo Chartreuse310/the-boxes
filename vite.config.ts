@@ -7,9 +7,12 @@ import path from 'node:path'
 import {
   addTaskTodo,
   addTodo,
+  clearOnboarding,
   ensureIdsInFile,
+  getOnboarding,
   migrateTodo,
   reorderInFile,
+  seedOnboardingIfEmpty,
   setTodoStateInFile,
   taskPath,
   touchDay,
@@ -109,6 +112,7 @@ async function readVersions(): Promise<{ version: string | null; specVersion: st
  *   GET /api/days        → ["2026-09-19", ...] 有记录的日期，倒序
  *   GET /api/days/:date  → { date, content } 该日 inbox 的原文 markdown
  *   GET /api/events      → SSE 文件变更流（数据目录改动即推 `changed`，界面自动刷新）
+ *   GET /api/onboarding  → { present, files } 示例是否仍在；POST /api/onboarding/clear 清空示例
  *
  * 开发期读写、仅本机；日期/路径参数经过正则校验，防止路径穿越。打包 Tauri 时由 Rust 侧实现同名接口。
  */
@@ -117,7 +121,10 @@ function boxesApi(dataDir: string): Plugin {
   const sseClients = new Set<ServerResponse>()
   return {
     name: 'boxes-dev-api',
-    configureServer(server) {
+    async configureServer(server) {
+      // 空目录首次打开 → 铺一份自解释的示例数据（有数据/已处理过则跳过）。await 保证首个请求即见示例，
+      // 避开前端时序竞态；打包 Tauri 时改由 Rust 侧在启动时做同样的事。
+      await seedOnboardingIfEmpty(dataDir).catch(() => {})
       // 文件监听：递归 watch 数据目录，150ms 去抖后通知所有 SSE 客户端。
       // 目录可能尚不存在（用户第一次跑）→ 先建；不支持递归或 watch 抛错时降级为「无自动刷新」，不崩。
       let timer: ReturnType<typeof setTimeout> | null = null
@@ -200,6 +207,21 @@ function boxesApi(dataDir: string): Plugin {
           res.write('retry: 1000\n\n')
           sseClients.add(res)
           req.on('close', () => sseClients.delete(res))
+          return
+        }
+
+        // GET /api/onboarding : 示例是否仍在（决定「清空示例」按钮显隐）。
+        if (req.method === 'GET' && /^\/onboarding\/?$/.test(pathname)) {
+          handle(() => getOnboarding(dataDir))
+          return
+        }
+
+        // POST /api/onboarding/clear : 删示例文件、置空标记（下次开不再自动铺）。
+        if (req.method === 'POST' && /^\/onboarding\/clear$/.test(pathname)) {
+          handle(async () => {
+            await clearOnboarding(dataDir)
+            return { ok: true }
+          })
           return
         }
 
