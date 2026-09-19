@@ -359,23 +359,22 @@ function MiniCalendar(props: {
   )
 }
 
-/** 编辑态目标 AddTarget → 接口用 TodoSource（newTask 落当前月新任务文件）。 */
-function resolveTarget(loc: AddTarget): TodoSource {
-  if (loc.kind === 'day') return { kind: 'day', date: loc.date }
-  if (loc.kind === 'task') return { kind: 'task', month: loc.month, slug: loc.slug }
-  return { kind: 'task', month: today().slice(0, 7), slug: loc.name }
+/** 位置下拉的当前值 token：日期文件用日期，任务文件用 slug（= 文件名）。 */
+function locTokenOf(source: TodoSource): string {
+  return source.kind === 'day' ? source.date : source.slug
 }
 
-/** 当前所在文件的显示名（编辑器的位置默认值） */
-function sourceName(source: TodoSource, tasks: TaskSummary[]): string {
-  if (source.kind === 'day') return source.date
-  return tasks.find((t) => t.month === source.month && t.slug === source.slug)?.title || source.slug
-}
-
-/** 来源 → 初始位置目标（编辑器打开时胶囊即显示当前文件） */
-function sourceToTarget(source: TodoSource, tasks: TaskSummary[]): AddTarget {
-  if (source.kind === 'day') return { kind: 'day', date: source.date }
-  return { kind: 'task', month: source.month, slug: source.slug, title: sourceName(source, tasks) }
+/**
+ * 解析位置下拉的输入 → 目标文件（整行落到这里）。
+ * 空 = 当日；ISO 日期 = 该日 inbox；命中已有任务 slug/名 = 该任务；否则 = 以该名新建任务（当前月）。
+ */
+function resolveLocTarget(value: string, tasks: TaskSummary[]): TodoSource {
+  const v = value.trim()
+  if (!v) return { kind: 'day', date: today() }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return { kind: 'day', date: v }
+  const tk = tasks.find((t) => t.slug === v || t.title === v)
+  if (tk) return { kind: 'task', month: tk.month, slug: tk.slug }
+  return { kind: 'task', month: today().slice(0, 7), slug: v }
 }
 
 /**
@@ -393,42 +392,10 @@ function TodoEditor(props: {
   const [text, setText] = useState(todo.text)
   const [start, setStart] = useState(todo.startDate ?? '')
   const [done, setDone] = useState(todo.doneDate ?? '')
-  // 位置：打开即显示当前所在文件；`@` 换一项替换之；`×` 删除掉回当日（与添加框一致）
-  const [loc, setLoc] = useState<AddTarget>(() => sourceToTarget(todo.source, tasks))
-  const [locDraft, setLocDraft] = useState('')
-  const [locActive, setLocActive] = useState(0)
-  const locRef = useRef<HTMLInputElement | null>(null)
-
-  const atQuery = /@([^\s@]*)$/.exec(locDraft)?.[1] ?? null
-  const candidates = atQuery === null ? [] : buildAtCandidates(atQuery, tasks, days)
-  const menuShown = atQuery !== null && candidates.length > 0
-  const activeIdx = menuShown ? Math.min(locActive, candidates.length - 1) : 0
-
+  // 位置：所在文件的下拉单选（datalist），值 = 当前文件的日期 / slug；清空 = 当日，输入未知名 = 新建任务
+  const [loc, setLoc] = useState(() => locTokenOf(todo.source))
   const derived: TodoState = done ? 'done' : start ? 'doing' : 'todo'
-  const clearedTarget: AddTarget = { kind: 'day', date: today() } // × 后落当日
-
-  const pickLoc = (c: AtCand) => {
-    setLoc(c.target)
-    setLocDraft((d) => d.replace(/@([^\s@]*)$/, '').replace(/\s+$/, ''))
-    setLocActive(0)
-    locRef.current?.focus()
-  }
-  const onLocKey = (e: import('react').KeyboardEvent<HTMLInputElement>) => {
-    if (!menuShown) return
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setLocActive((a) => Math.min(a + 1, candidates.length - 1))
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setLocActive((a) => Math.max(a - 1, 0))
-    } else if (e.key === 'Enter' || e.key === 'Tab') {
-      e.preventDefault()
-      pickLoc(candidates[activeIdx])
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
-      setLocDraft((d) => d.replace(/@([^\s@]*)$/, ''))
-    }
-  }
+  const locId = `loc-${todo.id ?? 'new'}`
 
   const save = async () => {
     if (!todo.id) return
@@ -437,7 +404,7 @@ function TodoEditor(props: {
         text,
         start: start || null,
         done: done || null,
-        target: resolveTarget(loc), // 与当前来源相同则服务端原地保存，否则整行移动
+        target: resolveLocTarget(loc, tasks), // 与当前来源相同则服务端原地保存，否则整行移动
       })
     } catch {
       return // 保存失败：留在编辑态，不吞输入
@@ -447,10 +414,15 @@ function TodoEditor(props: {
 
   return (
     <div className="edit" onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel() } }}>
-      {/* 描述：全宽，复用添加框控件外观（surface + border-control + focus-within 环） */}
-      <div className="add-line">
+      {/* 一行搞定：开头是派生态状态盒 → 全宽描述 → 尾端所在文件下拉单选（可输入新建、清空回当日） */}
+      <div className="add-line edit-main">
+        <span className={'box box-' + derived} aria-hidden title={STATE_LABEL[derived]}>
+          <span className="box-sym">
+            {derived === 'done' ? <DoneCheck /> : derived === 'doing' ? <DoingHalf /> : null}
+          </span>
+        </span>
         <input
-          className="add-input"
+          className="add-input edit-desc"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
@@ -463,67 +435,33 @@ function TodoEditor(props: {
           autoFocus
           aria-label="描述"
         />
+        <input
+          className="add-input edit-loc"
+          list={locId}
+          value={loc}
+          onChange={(e) => setLoc(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              save()
+            }
+          }}
+          placeholder="所在文件"
+          aria-label="所在文件"
+          autoComplete="off"
+        />
+        <datalist id={locId}>
+          {tasks.map((t) => (
+            <option key={`t:${t.month}/${t.slug}`} value={t.slug} label={`${t.month} · ${t.title}`} />
+          ))}
+          {days.map((d) => (
+            <option key={`d:${d}`} value={d} label="日期" />
+          ))}
+        </datalist>
       </div>
 
-      {/* 位置：前面直接显示当前文件胶囊，×→当日，@→替换（与添加框同款下拉） */}
-      <div className="loc-bar">
-        <div className="add-line">
-          <button
-            type="button"
-            className="add-target"
-            onClick={() => setLoc(clearedTarget)}
-            title="删除位置 = 掉到当日"
-            aria-label={`所在位置：${targetLabel(loc)}，点击掉到当日`}
-          >
-            <span className="add-target-x" aria-hidden>
-              ×
-            </span>
-            {targetLabel(loc)}
-          </button>
-          <input
-            ref={locRef}
-            className="add-input"
-            type="text"
-            value={locDraft}
-            onChange={(e) => {
-              setLocDraft(e.target.value)
-              setLocActive(0)
-            }}
-            onKeyDown={onLocKey}
-            placeholder="@ 换到任务 / 日期"
-            aria-label="所在位置"
-            autoComplete="off"
-          />
-        </div>
-        {menuShown && (
-          <ul className="at-menu" role="listbox" aria-label="移动目标">
-            {candidates.map((c, i) => (
-              <li
-                key={c.key}
-                role="option"
-                aria-selected={i === activeIdx}
-                className={'at-item' + (c.target.kind === 'newTask' ? ' at-new' : '') + (i === activeIdx ? ' is-active' : '')}
-                onMouseEnter={() => setLocActive(i)}
-                onMouseDown={(e) => {
-                  e.preventDefault()
-                  pickLoc(c)
-                }}
-              >
-                <span className="at-label">{c.label}</span>
-                {c.hint && <span className="at-hint">{c.hint}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* 起止时间 + 派生态预览（盒子挪到此处，不挤占描述宽度） */}
+      {/* 起止时间：状态由这两个时间派生（见上面状态盒） */}
       <div className="edit-fields">
-        <span className={'box box-' + derived} aria-hidden title={STATE_LABEL[derived]}>
-          <span className="box-sym">
-            {derived === 'done' ? <DoneCheck /> : derived === 'doing' ? <DoingHalf /> : null}
-          </span>
-        </span>
         <label className="edit-field">
           <span className="edit-cap">开始</span>
           <input type="date" value={start} onChange={(e) => setStart(e.target.value)} aria-label="开始日期" />

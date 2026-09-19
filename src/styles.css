@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.15（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.16（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -540,9 +540,25 @@ h1 {
   flex-direction: column;
   gap: 10px;
 }
-/* 位置行的下拉锚点 */
-.loc-bar {
-  position: relative;
+/* 编辑器主行：状态盒（开头）+ 描述（全宽）+ 所在文件下拉（尾端，前置分隔线） */
+.edit-main .box {
+  flex: none;
+}
+.edit-desc {
+  flex: 1 1 auto;
+  min-width: 6ch;
+}
+.edit-loc {
+  flex: none;
+  width: 13em;
+  padding-left: 12px;
+  margin-left: 2px;
+  border-left: 1px solid var(--divider);
+}
+@media (max-width: 720px) {
+  .edit-loc {
+    width: 9em;
+  }
 }
 
 .edit-fields {
