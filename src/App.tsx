@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { api, type BoxesInfo, type SourcedTodo, type TaskSummary, type TodoSource } from './api'
 import { parseInbox, parseTask, type TaskMeta, type TodoState } from './lib/parser'
 
@@ -205,9 +205,6 @@ function HomeIcon() {
   )
 }
 
-/** 点击三态循环：只走到完成，停在 [x]，不回环 */
-const STATE_CYCLE: TodoState[] = ['todo', 'doing', 'done']
-
 /** 平铺视图的一组：来源相同的相邻行（/api/all 的排序已保证同文件行相邻） */
 interface TodoGroup {
   key: string
@@ -240,16 +237,9 @@ function sameSource(a: TodoSource, b: TodoSource): boolean {
   return b.kind === 'task' && a.month === b.month && a.slug === b.slug
 }
 
-/** 点击 box 会推进到的下一个状态；已到终态 [x] 时返回 null */
-function nextState(state: TodoState): TodoState | null {
-  const i = STATE_CYCLE.indexOf(state)
-  return i === -1 || i === STATE_CYCLE.length - 1 ? null : STATE_CYCLE[i + 1]
-}
-
-/** box 的无障碍标签：可推进时报"会变成什么"，到终态时报当前状态名 */
+/** box 的无障碍标签：点击展开起止日期编辑，播报当前状态。 */
 function boxAriaLabel(state: TodoState): string {
-  const next = nextState(state)
-  return next ? `标记为${STATE_LABEL[next]}` : STATE_LABEL[state]
+  return `编辑起止日期（当前${STATE_LABEL[state]}）`
 }
 
 /** 日期短格式（§5.1）：同年 M/D，非同年 YYYY/M/D */
@@ -366,140 +356,50 @@ function MiniCalendar(props: {
   )
 }
 
-/** 位置下拉的当前值 token：日期文件用日期，任务文件用 slug（= 文件名）。 */
-function locTokenOf(source: TodoSource): string {
-  return source.kind === 'day' ? source.date : source.slug
-}
-
 /**
- * 解析位置下拉的输入 → 目标文件（整行落到这里）。
- * 空 = 当日；ISO 日期 = 该日 inbox；命中已有任务 slug/名 = 该任务；否则 = 以该名新建任务（当前月）。
+ * 点 checkbox 展开的日期条：编辑开始/完成日期（状态随之派生）+「标为完成（今天）」。
+ * 每次改动即时写盘（数据即文件）；名称编辑靠双击、换文件靠拖，都不在这里。
  */
-function resolveLocTarget(value: string, tasks: TaskSummary[]): TodoSource {
-  const v = value.trim()
-  if (!v) return { kind: 'day', date: today() }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return { kind: 'day', date: v }
-  const tk = tasks.find((t) => t.slug === v || t.title === v)
-  if (tk) return { kind: 'task', month: tk.month, slug: tk.slug }
-  return { kind: 'task', month: today().slice(0, 7), slug: v }
-}
-
-/**
- * 双击行进入的内联编辑器：改描述、改开始/完成时间（状态由时间派生）、改所在位置（`@`，换文件即整行移动）。
- * 保存失败留在编辑态不吞输入；Esc / 取消放弃，描述框回车提交。
- */
-function TodoEditor(props: {
+function DateStrip(props: {
   todo: SourcedTodo
-  tasks: TaskSummary[]
-  days: string[]
-  onSave: () => void
-  onCancel: () => void
+  onPatch: (p: { start?: string | null; done?: string | null }) => void
 }) {
-  const { todo, tasks, days, onSave, onCancel } = props
-  const [text, setText] = useState(todo.text)
-  const [start, setStart] = useState(todo.startDate ?? '')
-  const [done, setDone] = useState(todo.doneDate ?? '')
-  // 位置：所在文件的下拉单选（datalist），值 = 当前文件的日期 / slug；清空 = 当日，输入未知名 = 新建任务
-  const [loc, setLoc] = useState(() => locTokenOf(todo.source))
-  const derived: TodoState = done ? 'done' : start ? 'doing' : 'todo'
-  const locId = `loc-${todo.id ?? 'new'}`
-
-  const save = async () => {
-    if (!todo.id) return
-    try {
-      await api.editTodo(todo.source, todo.id, {
-        text,
-        start: start || null,
-        done: done || null,
-        target: resolveLocTarget(loc, tasks), // 与当前来源相同则服务端原地保存，否则整行移动
-      })
-    } catch {
-      return // 保存失败：留在编辑态，不吞输入
-    }
-    onSave()
-  }
-
+  const { todo, onPatch } = props
   return (
-    <div className="edit" onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel() } }}>
-      {/* 第一行：描述——多行文本框。Enter 换行，⌘/Ctrl+Enter 保存；保存时后端把换行并成空格（todo 仍一行）。 */}
-      <textarea
-        className="edit-area"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-            e.preventDefault()
-            save()
-          }
-        }}
-        placeholder="描述"
-        rows={2}
-        autoFocus
-        aria-label="描述"
-      />
-
-      {/* 第二行：开始 日期 · 完成 日期 · 状态（点按循环，底层写开始/完成日期） */}
-      <div className="edit-row">
-        <label className="edit-field">
-          <span className="edit-cap">开始</span>
-          <input type="date" value={start} onChange={(e) => setStart(e.target.value)} aria-label="开始日期" />
-          {start && (
-            <button type="button" className="edit-clear" onClick={() => setStart('')} aria-label="清除开始日期">
-              ×
-            </button>
-          )}
-        </label>
-        <label className="edit-field">
-          <span className="edit-cap">完成</span>
-          <input type="date" value={done} onChange={(e) => setDone(e.target.value)} aria-label="完成日期" />
-          {done && (
-            <button type="button" className="edit-clear" onClick={() => setDone('')} aria-label="清除完成日期">
-              ×
-            </button>
-          )}
-        </label>
-        <span className="edit-status" aria-label={`状态：${STATE_LABEL[derived]}`}>
-          <span className={'box box-' + derived} aria-hidden>
-            <span className="box-sym">
-              {derived === 'done' ? <DoneCheck /> : derived === 'doing' ? <DoingHalf /> : null}
-            </span>
-          </span>
-          {STATE_LABEL[derived]}
-        </span>
-      </div>
-
-      {/* 第三行：所在文件（可输入下拉单选：选已有 / 输入新名建任务 / 清空回当日） */}
-      <label className="edit-field edit-loc-field">
-        <span className="edit-cap">所在文件</span>
+    <div className="date-strip" onKeyDown={(e) => e.stopPropagation()}>
+      <label className="edit-field">
+        <span className="edit-cap">开始</span>
         <input
-          className="edit-loc"
-          list={locId}
-          value={loc}
-          onChange={(e) => setLoc(e.target.value)}
-          placeholder="日期 / 任务名"
-          aria-label="所在文件"
-          autoComplete="off"
+          type="date"
+          value={todo.startDate ?? ''}
+          onChange={(e) => onPatch({ start: e.target.value || null })}
+          aria-label="开始日期"
         />
-        <datalist id={locId}>
-          {tasks.map((t) => (
-            <option key={`t:${t.month}/${t.slug}`} value={t.slug} label={`${t.month} · ${t.title}`} />
-          ))}
-          {days.map((d) => (
-            <option key={`d:${d}`} value={d} label="日期" />
-          ))}
-        </datalist>
+        {todo.startDate && (
+          <button type="button" className="edit-clear" onClick={() => onPatch({ start: null })} aria-label="清除开始日期">
+            ×
+          </button>
+        )}
       </label>
-
-      <div className="edit-actions">
-        <div className="edit-btns">
-          <button type="button" className="btn" onClick={onCancel}>
-            取消
+      <label className="edit-field">
+        <span className="edit-cap">完成</span>
+        <input
+          type="date"
+          value={todo.doneDate ?? ''}
+          onChange={(e) => onPatch({ done: e.target.value || null })}
+          aria-label="完成日期"
+        />
+        {todo.doneDate && (
+          <button type="button" className="edit-clear" onClick={() => onPatch({ done: null })} aria-label="清除完成日期">
+            ×
           </button>
-          <button type="button" className="btn btn-primary" onClick={save}>
-            保存
-          </button>
-        </div>
-      </div>
+        )}
+      </label>
+      {!(todo.state === 'done' && todo.doneDate === today()) && (
+        <button type="button" className="btn date-quick" onClick={() => onPatch({ done: today() })}>
+          标为完成（今天）
+        </button>
+      )}
     </div>
   )
 }
@@ -523,8 +423,11 @@ export default function App() {
   // `@` 下拉键盘高亮项下标
   const [active, setActive] = useState(0)
   const inputRef = useRef<HTMLInputElement | null>(null)
-  // 正在编辑的行的 key（source+id），null = 无。双击行进入，保存/取消退出。
-  const [editingKey, setEditingKey] = useState<string | null>(null)
+  // 名称就地编辑：双击行文字进入，nameKey = 正在改的行 key，nameDraft = 草稿。
+  const [nameKey, setNameKey] = useState<string | null>(null)
+  const [nameDraft, setNameDraft] = useState('')
+  // 日期条：点 checkbox 展开该行的起止日期编辑，datesKey = 展开的行 key。
+  const [datesKey, setDatesKey] = useState<string | null>(null)
   // 上手示例是否仍在（决定顶部「清空示例」横幅显隐）。启动播种在服务器侧完成，这里只查状态。
   const [demoActive, setDemoActive] = useState(false)
 
@@ -586,15 +489,15 @@ export default function App() {
   }, [view])
 
   // SSE 自动刷新（北极星：外部改动→界面 ≤2s）。订阅只建一次，靠 ref 读最新的
-  // refreshView / 编辑态（否则闭包陈旧）。正在编辑某行时不刷新，免得冲掉未保存的编辑器。
-  const liveRef = useRef({ refreshView, editingKey })
-  liveRef.current = { refreshView, editingKey }
+  // refreshView / 编辑态（否则闭包陈旧）。正在改名称或开着日期条时不刷新，免得冲掉输入。
+  const liveRef = useRef({ refreshView, editing: false })
+  liveRef.current = { refreshView, editing: nameKey !== null || datesKey !== null }
   useEffect(
     () =>
       api.subscribe(() => {
         api.listDays().then(setDays).catch(() => {})
         api.listTasks().then(setTasks).catch(() => {})
-        if (!liveRef.current.editingKey) liveRef.current.refreshView()
+        if (!liveRef.current.editing) liveRef.current.refreshView()
       }),
     [],
   )
@@ -617,34 +520,52 @@ export default function App() {
     refreshView()
   }
 
-  // 点击 box：三态前进（todo→doing→done，done 停住）。
-  // 接口按该行自己的来源分叉（平铺视图里 inbox 行与任务行混在一起）
-  const cycleState = async (todo: SourcedTodo, index: number) => {
-    if (!todo.id) return
-    const next = nextState(todo.state)
-    if (!next) return // 已到 done 终态 → 不响应点击
-    setTodos((prev) => {
-      if (!prev) return prev
-      const copy = [...prev]
-      copy[index] = { ...todo, state: next }
-      return copy
-    })
-    if (todo.source.kind === 'day') await api.setState(todo.source.date, todo.id, next)
-    else await api.taskSetState(todo.source.month, todo.source.slug, todo.id, next)
-    if (todo.source.kind === 'task') api.listTasks().then(setTasks).catch(() => {})
+  /** 行 key：来源 + id，用于就地编辑 / 日期条定位 */
+  const rowKey = (t: SourcedTodo) =>
+    (t.source.kind === 'day' ? 'd' + t.source.date : 't' + t.source.month + '/' + t.source.slug) + ':' + t.id
+
+  // 统一写盘：文本 / 起止日期 / 换文件（target）都走 updateTodo，改后按盘重取。
+  const patchTodo = async (
+    t: SourcedTodo,
+    patch: { text?: string; start?: string | null; done?: string | null; target?: TodoSource },
+  ) => {
+    if (!t.id) return
+    try {
+      await api.editTodo(t.source, t.id, patch)
+    } catch {
+      refreshView() // 失败回滚到盘上现状
+      return
+    }
+    api.listDays().then(setDays).catch(() => {})
+    api.listTasks().then(setTasks).catch(() => {})
     refreshView()
   }
 
-  // 拖拽迁移（SPEC v2.0 物理移动）：todo 行原样移动到目标日文件。
-  // 只对 inbox 来源的行开放（平铺或 day 视图均可）——任务文件里的 todo
-  // 拖到日期属跨容器移动，语义待 M2 定义。
-  const migrateTo = async (target: string) => {
+  // 名称就地编辑：双击行文字进入；Enter/失焦提交（后端把换行并成空格），Esc 取消。
+  const startNameEdit = (t: SourcedTodo) => {
+    if (!t.id) return
+    setNameKey(rowKey(t))
+    setNameDraft(t.text)
+  }
+  const commitName = (t: SourcedTodo) => {
+    const v = nameDraft.trim()
+    if (v && v !== t.text) void patchTodo(t, { text: v })
+    setNameKey(null)
+  }
+
+  // 点 checkbox：切换该行日期条（不再盲切三态——状态改由日期驱动）。
+  const toggleDates = (t: SourcedTodo) => {
+    if (!t.id) return
+    setDatesKey((k) => (k === rowKey(t) ? null : rowKey(t)))
+  }
+
+  // 拖拽改文件（唯一入口）：拖到日历某格 → 移到那天；拖到任务卡片 → 移进该任务。任意来源皆可。
+  const moveTo = async (target: TodoSource) => {
     const dragged = drag.current
     drag.current = null
-    if (!dragged || dragged.source.kind !== 'day' || target === dragged.source.date) return
-    await api.migrate(dragged.source.date, dragged.id, target)
-    api.listDays().then(setDays)
-    refreshView()
+    const t = dragged && todos?.find((x) => x.id === dragged.id && sameSource(x.source, dragged.source))
+    if (!t || sameSource(target, t.source)) return
+    await patchTodo(t, { target })
   }
 
   // 拖动重排：只在同一来源文件内落子——单文件视图=整列表，平铺视图=该组内；跨来源的落点忽略
@@ -765,32 +686,14 @@ export default function App() {
 
   /** 单行 todo 的渲染（平铺分组与筛选视图共用；i 是 todos 的全局下标，重排靠它定位） */
   const renderTodo = (t: SourcedTodo, i: number) => {
-    const key = (t.source.kind === 'day' ? 'd' + t.source.date : 't' + t.source.month + '/' + t.source.slug) + ':' + t.id
-    if (t.id && key === editingKey) {
-      return (
-        <li key={t.id} className="todo todo-editing">
-          <TodoEditor
-            todo={t}
-            tasks={tasks}
-            days={days}
-            onSave={() => {
-              setEditingKey(null)
-              api.listDays().then(setDays).catch(() => {})
-              api.listTasks().then(setTasks).catch(() => {})
-              refreshView()
-            }}
-            onCancel={() => setEditingKey(null)}
-          />
-        </li>
-      )
-    }
-    return (
+    const key = rowKey(t)
+    const editingName = nameKey === key
+    const row = (
       <li
         key={t.id ?? i}
         className={`todo todo-${t.state}`}
         style={{ '--i': i } as import('react').CSSProperties}
-        draggable={!!t.id}
-        onDoubleClick={() => t.id && setEditingKey(key)}
+        draggable={!!t.id && !editingName}
         onDragStart={(e) => {
           if (!t.id) return
           // 声明这是移动而非复制：否则浏览器默认在游标旁画「+」角标，误导成「会复制」
@@ -802,15 +705,16 @@ export default function App() {
         }}
         onDragOver={(e) => {
           e.preventDefault()
-          e.dataTransfer.dropEffect = 'move' // 落点也标移动，与日历迁移手感一致
+          e.dataTransfer.dropEffect = 'move' // 落点也标移动，与日历/卡片迁移手感一致
         }}
         onDrop={() => onDrop(i)}
       >
         <button
           className={`box box-${t.state}`}
           disabled={!t.id}
-          onClick={() => cycleState(t, i)}
+          onClick={() => toggleDates(t)}
           aria-label={boxAriaLabel(t.state)}
+          aria-expanded={datesKey === key}
         >
           <span className="box-sym" key={t.state}>
             {t.state === 'done' ? (
@@ -821,10 +725,30 @@ export default function App() {
           </span>
         </button>
         <span className="text">
-          <span className="todo-title">{t.text}</span>
-          {/* 日期注记：沿用文件里的 ISO 日期（与 Markdown 原文对得上）和原始措辞。
-              这是 §5.1「界面不用 emoji / 不用破折号拼注记」的既定例外。
-              与标题同处 flex-wrap：放得下就同行，放不下整条注记折到新行（标题保持首行）。 */}
+          {editingName ? (
+            <input
+              className="todo-name-input"
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onBlur={() => commitName(t)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  commitName(t)
+                } else if (e.key === 'Escape') {
+                  e.preventDefault()
+                  setNameKey(null)
+                }
+              }}
+              autoFocus
+              aria-label="编辑名称"
+            />
+          ) : (
+            <span className="todo-title" onDoubleClick={() => startNameEdit(t)} title="双击编辑名称">
+              {t.text}
+            </span>
+          )}
+          {/* 日期注记：沿用文件里的 ISO 日期与原始措辞（§5.1 例外），标题首行、注记次行。 */}
           {t.startDate && (
             <span className="done-note">
               ——始于 {t.startDate} 🛫
@@ -841,6 +765,17 @@ export default function App() {
         {t.date && <span className="chip chip-date">@{t.date}</span>}
       </li>
     )
+    if (t.id && datesKey === key) {
+      return (
+        <Fragment key={t.id}>
+          {row}
+          <li className="todo-dates">
+            <DateStrip todo={t} onPatch={(p) => void patchTodo(t, p)} />
+          </li>
+        </Fragment>
+      )
+    }
+    return row
   }
 
   const todayStr = today()
@@ -882,7 +817,7 @@ export default function App() {
               // 再按一次已选中的那天 = 取消筛选，回平铺
               setView(view?.kind === 'day' && view.date === date ? { kind: 'all' } : { kind: 'day', date })
             }
-            onDropDate={migrateTo}
+            onDropDate={(date) => void moveTo({ kind: 'day', date })}
           />
 
           {/* 任务卡片：名称 + 提出月份（较淡，区分跨月重名）+ 一句话简介（**目标**） */}
@@ -902,6 +837,15 @@ export default function App() {
                       // 再按一次已选中的卡片 = 取消筛选，回平铺
                       setView(selected ? { kind: 'all' } : { kind: 'task', month: t.month, slug: t.slug })
                     }
+                    onDragOver={(e) => {
+                      if (!drag.current) return
+                      e.preventDefault()
+                      e.dataTransfer.dropEffect = 'move'
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      void moveTo({ kind: 'task', month: t.month, slug: t.slug })
+                    }}
                   >
                     <span className="task-top">
                       <span className="task-name">{t.title}</span>

@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.22（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.23（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -544,64 +544,40 @@ h1 {
   color: var(--text-secondary);
 }
 
-/* ---------- 行内编辑器（双击行进入，style-guide §5.7）---------- */
-/* 编辑是瞬时态：整行改为纵向表单。描述与位置复用添加框的 .add-line / .add-input /
-   .add-target / .at-menu（与「输入 todo」视觉一致）。控件一律 surface 底 +
-   border-control 描边 + :focus 环；主按钮用 --accent 文本/描边，不叠白、不引新色。 */
-/* 编辑行整块转纵向表单。用 li.todo.todo-editing 抬特异度：`.todo`/`.todo + .todo::before`/
-   `.todo:hover` 定义在更靠后，普通单类会盖掉这里的 display/hover/分隔线，导致右侧留白。 */
-li.todo.todo-editing {
-  display: block;
-  cursor: default;
-}
-li.todo.todo-editing::before {
-  display: none; /* 编辑行不画缩进分隔线 */
-}
-li.todo.todo-editing:hover {
-  background: transparent;
-}
-.edit {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-/* 第一行：描述——多行文本框（surface 底 + border-control 描边，focus 环同 §5.2） */
-.edit-area {
-  width: 100%;
+/* ---------- 行内编辑：改名（双击文字）+ 日期条（点 checkbox 展开）---------- */
+/* 改名是就地输入，沿用显示行的字号字色（surface + border-control + focus 环，§5.6 控件规范）。 */
+.todo-name-input {
+  flex: 1;
+  min-width: 0;
   font: inherit;
   font-size: var(--fs-body);
   color: var(--text);
   background: var(--bg-surface);
   border: 1px solid var(--border-control);
   border-radius: var(--radius-control);
-  padding: 8px 12px;
-  line-height: 1.5;
-  min-height: 2.6em;
-  resize: vertical;
+  padding: 2px 8px;
 }
-.edit-area::placeholder {
-  color: var(--text-secondary);
-}
-.edit-area:focus-visible {
+.todo-name-input:focus-visible {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-focus);
 }
-/* 第二行：开始 / 完成 / 状态 —— 右对齐（可换行） */
-.edit-row {
+/* 日期条：所属行的下一行 li（缩进到文字起点下方），surface 细框，含 开始/完成 + 快捷完成 */
+.todo-dates {
+  list-style: none;
+}
+.date-strip {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
   gap: 8px 16px;
+  margin: -2px 12px 8px calc(12px + var(--checkbox-size) + 12px);
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-control);
 }
-/* 派生态预览：静态标记，去掉按钮态的悬停缩放（底色沿用各态自身） */
-.edit .box {
-  cursor: default;
-}
-.edit .box:not(:disabled):hover {
-  transform: none;
-}
+/* 日期条里的字段：标签（11px 次级）+ 控件（surface + border-control + focus 环）+ × 清除 */
 .edit-field {
   display: inline-flex;
   align-items: center;
@@ -646,36 +622,7 @@ li.todo.todo-editing:hover {
   background: var(--bg-hover);
 }
 
-.edit-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-}
-/* 状态只读展示：盒图标（各态自带色）+ 中文名，随起止时间派生。非按钮、不可点。 */
-.edit-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--fs-label);
-  color: var(--text-secondary);
-}
-/* 第三行：所在文件 —— 右对齐、输入框随内容宽度（不通栏） */
-.edit-loc-field {
-  width: 100%;
-  justify-content: flex-end;
-}
-.edit-loc-field .edit-loc {
-  flex: 0 1 auto;
-  width: auto;
-  min-width: 8ch;
-  max-width: 26ch;
-  field-sizing: content; /* 支持时按内容自适应；不支持则退到默认适中宽度 */
-}
-.edit-btns {
-  display: flex;
-  gap: 8px;
-}
+/* 通用次级按钮（日期条「标为完成」与示例横幅「清空示例」共用） */
 .btn {
   font: inherit;
   font-size: var(--fs-label);
@@ -695,15 +642,6 @@ li.todo.todo-editing:hover {
 .btn:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--accent-focus);
-}
-/* 主操作：--accent 描边 + 文本（§2.2 accent 三处之一），不叠底色、不引新色 */
-.btn-primary {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-.btn-primary:hover {
-  color: var(--accent);
-  background: var(--accent-focus);
 }
 
 /* ---------- 列表 ---------- */

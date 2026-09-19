@@ -1,6 +1,6 @@
 # the-boxes · 界面风格规则（Style Guide）
 
-> 版本 v0.3.22 · 2026-09-20 · **本文是界面视觉的唯一事实源。**
+> 版本 v0.3.23 · 2026-09-20 · **本文是界面视觉的唯一事实源。**
 > `src/styles.css` 必须服从本文；两者不一致时，以本文为准，并视为待修复缺陷。
 > 视觉改动流程：先改本文 → 再改 `styles.css` → 在文末变更日志追加一条。
 
@@ -320,17 +320,15 @@
 - **`@` 下拉**：查询串为空列已有任务 + 已有日期文件；命中 ISO 日期补「用该日期」；查询非空且无同名任务，末位补「创建任务 …」（`--accent` 文本，需显式选中，回车不自动建）。最多 8 条。浮层规格同 §5.5。
 - 交互：方向键移动高亮、Enter / Tab 选中当前项、Esc 抹掉未闭合的 `@token` 收起；无下拉时回车提交（`<form>` `onSubmit`）。提交即清空草稿与目标；失败回填不吞输入；成功刷新日历圆点、任务列表与当前视图。空正文不提交。
 
-### 5.7 行内编辑器（双击 todo 行进入，v0.3.14 起）
+### 5.7 行内编辑（改名 / 起止日期 / 移动文件，三种各用各的入口）
 
-**就地改一行 todo 的三件事**：描述、起止时间（状态由时间派生）、所在文件（下拉单选，换文件 = 整行移动）。编辑是瞬时态，不新增卡片外观（§4.1 行不是卡片：整行转纵向表单，零边框零阴影）。
+**改一行 todo 的三件事分三个入口，不再有"整行大表单"**：改**名称**用双击、改**起止时间/状态**用点 checkbox、改**所在文件**只用拖拽。编辑是瞬时态，不新增卡片外观（§4.1）。所有改动即时写盘（`updateTodo`），无"保存/取消"。
 
-- 触发：双击带 `^id` 的行（手写无 id 的行不可编辑，先由交互补 id）。`Esc` 或「取消」放弃；描述框 `⌘/Ctrl+Enter` 或「保存」提交（textarea 里 `Enter` = 换行，保存时后端把换行并成空格、todo 仍一行）；**保存失败留在编辑态**，不吞已输入内容。
-- **第一行 = 描述**：`.edit-area`——**多行文本框 `<textarea>`**，通栏宽，`--bg-surface` + `--border-control` + `--radius-control`，`focus-visible` 环同 §5.2；`min-height:2.6em`、可纵向 `resize`。占满整行。
-- **第二行 = 开始 / 完成 / 状态**（**右对齐**）：`.edit-row`（flex、`justify-content:flex-end`、可换行、gap 8×16px）。①「开始 / 完成」两个 `.edit-field`：`<input type=date>` + 有值时一枚 `×`（`.edit-clear`）清除；②**状态是只读展示 `.edit-status`**（盒图标 + 中文名，随起止时间派生，**不可点**）——有完成→完成、无完成有开始→进行中、皆空→待办。三态只有"完成"有色（§4.2）。改状态即改这两个日期，不单设可交互的状态控件。
-- **第三行 = 所在文件**（**右对齐、框随内容宽度**）：`.edit-field.edit-loc-field`（`width:100%` 但 `justify-content:flex-end`；`.edit-loc` `field-sizing:content`、`min 8ch / max 26ch`，**不通栏**）——**可输入的下拉单选**（`<input list>`+`<datalist>`）：选项列已有任务（value=slug，label=`月份 · 任务名`）+ 已有日期文件；值 = 当前所在文件的日期 / slug，**清空 = 掉到当日**、输入未知名 = 保存时**以该名新建任务**（当前月）、命中 slug/名或 ISO 日期则路由到该文件。保存目标即字段所指——与来源相同则原地保存，否则整行移动过去（id 保留、撞车换新）。
-- **整行必须占满宽度**：编辑行 `.todo-editing` 要用 **`li.todo.todo-editing`** 抬特异度，压过定义更靠后的 `.todo`（`display:flex`）、`.todo + .todo::before`、`.todo:hover`——否则单类 `.todo-editing` 会失手、编辑内容缩成内容宽、右侧留一大块空白。落实：整行 `display:block`、`:hover` 无底色、去缩进分隔线。
-- **动作行 `.edit-actions`**（右对齐）：`.btn`（次级，`--text-secondary` 描边、悬停 `--bg-hover`）+ `.btn-primary`（`--accent` 描边+文本、悬停 `--accent-focus` 底，**不叠白字、不引新色值**）。
-- 控件配色全走 token：文本框 / 日期 / 所在文件 均 `--bg-surface` + `--border-control` + `--radius-control`，`:focus` 环同 §5.2。数据格式仍 SPEC §4/§5，`+任务`/`@日期` 不写。
+- **改名 = 双击行文字**：该行的 `.todo-title` 就地换成一个**输入框 `.todo-name-input`**，**沿用显示行的字号字色**（`--fs-body`/`--text`，仅加 surface + border-control + focus 环以示"在编辑"）。`Enter` / 失焦提交、`Esc` 取消；空白提交忽略。编辑期该 `li` `draggable=false`，以免拖拽抢走选中。
+- **起止日期 = 点 checkbox**：checkbox 不再"盲切三态"（那会凭空造今天日期），改为**展开该行下方的日期条 `.date-strip`**（作为紧随的 `.todo-dates` 列表项，缩进到文字起点下方，`margin-left = 12 + --checkbox-size + 12`）：开始 / 完成 两个 `<input type=date>`（`.edit-field` + `× .edit-clear` 清除）+「标为完成（今天）`.btn`」快捷键。**状态仍由两个日期派生**（有完成→完成、有开始→进行中、皆空→待办）且**只读**——checkbox 上的盒图标即时反映；三态只有"完成"有色（§4.2）。再点 checkbox 收起。
+- **换文件 = 只能拖**（唯一入口，编辑器里**没有**所在文件字段）：把行拖到 mini 日历某格 → 移到那天；拖到左下任务卡片 → 移进该任务。任意来源互通（日↔任务、任务↔任务），落点走 `updateTodo` 的整行移动（id 保留、撞车换新）。落点视觉沿用 §5.3 的拖放高亮（日历格 `--accent`）；任务卡片的拖放高亮可后续补。
+- **控件配色**：改名框 / 日期条字段 / 「标为完成」按钮均走 token（`--bg-surface` + `--border-control` + `--radius-control`，`:focus` 环同 §5.2；`.btn` 次级、悬停 `--bg-hover`）。数据格式仍 SPEC §4/§5，`+任务`/`@日期` 不写。
+- **宽度坑（沿用 v0.3.21）**：若将来再把整行改成非 flex 布局，记得 `li.todo.todo-editing` 之类覆盖要用高特异度，别被更靠后的 `.todo{display:flex}` 盖掉致右侧留白。
 
 ### 5.8 上手示例横幅（v0.3.17 起）
 
@@ -379,13 +377,14 @@
 - [ ] 平铺视图是否按来源分组、组头显示文件名称（日期 / 任务名 + 提出月份），行尾是否无来源标注？筛选视图是否无组头？（§5.4）
 - [ ] 添加框是否只在 all / day 视图出现、控件描边落在 page/surface（非 hover/sunken）、焦点环同 §5.2？（§5.6）
 - [ ] `@` 下拉是否按 §5.5 浮层规格（surface / border-control / radius-pop / shadow-pop）、高亮与悬停同底色、「创建任务 …」是否只用 `--accent` 文本不叠底色？目标徽章是否可点击清除？（§5.6）
-- [ ] 行内编辑器三行：①描述=通栏多行文本框；②开始/完成日期 + **只读状态展示**（随日期派生、不可点）；③所在文件独占一行（datalist 单选，清空→当日 / 新名→建任务）。编辑行是否用 `li.todo.todo-editing` 抬特异度**占满宽度**（无右侧留白、无 hover 底色、无缩进分隔线）？主按钮 `--accent` 描边+文本非白字底、按钮行右对齐？（§5.7）
+- [ ] 行内编辑三入口：改名=双击文字（就地 `.todo-name-input`，沿用显示字号字色）；起止日期=点 checkbox 展开 `.date-strip`（开始/完成 + 快捷完成，状态只读派生）；换文件=只能拖到日历格/任务卡片（编辑器内无所在文件字段）。「盲切三态」是否已移除、不再凭空造日期？（§5.7）
 - [ ] 上手示例横幅是否 surface 底 + `--divider` 描边（非 border-control）、按钮复用 `.btn`（描边落在 surface 达标）；示例不在时是否整条不渲染？（§5.8）
 - [ ] 进行中是否为"45° 分割、左上填满"的半填充圆？且 `.box` 保留 `overflow: hidden`、`.box-half` 尺寸 = `--checkbox-size`（改任一项都会在弧上露缝）？
 - [ ] `aria-label` 是否也过了上一条？（读屏用户同样会听到内部枚举名，但看不到界面，问题更难被发现）
 
 ## 变更日志
 
+- **2026-09-20 v0.3.23**：**编辑器拆成三入口——双击改名 / 点 checkbox 开日期条 / 换文件只能拖（重写 §5.7）。** 修改建议：一个整行大表单太重、且点 checkbox 盲切三态会凭空造今天日期；用户要"双击只改名沿用原样式、日期靠点 checkbox 出选项、文件夹只能拖动改"。实施方案：①删 `TodoEditor` 大表单 + 所在文件字段 + 只读状态块；②改名 = 双击 `.todo-title`→就地 `.todo-name-input`（沿用 `--fs-body`/`--text`，Enter/失焦提交、Esc 取消，编辑期禁拖）；③点 checkbox = 切换该行下方 `.todo-dates`/`.date-strip`（开始/完成 `type=date` + `×` +「标为完成(今天)`.btn`」，状态仍由日期派生、盒图标只读反映，移除 cycleState/nextState/STATE_CYCLE）；④换文件 = 拖到日历格或任务卡片（`moveTo` 走 `updateTodo` target，任意来源互通；日历落点复用高亮，任务卡片拖放高亮留后续）；⑤所有改动即时 `updateTodo` 写盘、无保存按钮；删 `.edit`/`.edit-area`/`.edit-row`/`.edit-loc*`/`.edit-actions`/`.edit-status`/`.btn-primary`/`li.todo.todo-editing` 等死样式。`src/styles.css` 加 `.todo-name-input`/`.todo-dates`/`.date-strip`，文件头版本引用升至 v0.3.23。数据格式无变化。
 - **2026-09-20 v0.3.22**：**编辑器第二/三行右对齐、所在文件框改随内容宽（改 §5.7）。** 修改建议：开始/完成/状态与所在文件都靠左、所在文件框通栏过大。实施方案：`.edit-row` 加 `justify-content:flex-end`；`.edit-loc-field` 由"输入框 flex:1 通栏"改 `justify-content:flex-end` + `.edit-loc` `field-sizing:content`（`min 8ch / max 26ch`、不通栏）。描述文本框仍通栏。`src/styles.css` 同步，文件头版本引用升至 v0.3.22。纯界面，数据格式无变化。
 - **2026-09-20 v0.3.21**：**编辑器占满宽度修复 + 状态改只读（改 §5.7）。** 修改建议：①编辑行右侧一大块留白——根因 `.todo-editing` 单类被更靠后的 `.todo{display:flex}` 盖掉，编辑内容缩成内容宽；②状态按钮不必可交互（日期才是入口）。实施方案：①`.todo-editing`→`li.todo.todo-editing`（含 `::before`/`:hover`）抬特异度强制 `display:block`、无 hover 底色、去缩进分隔线，编辑器随之占满；②`.status-btn`→静态 `.edit-status`（盒图标+中文名，随起止时间派生、不可点），删 cycleStatus。`src/styles.css` 同步，文件头版本引用升至 v0.3.21。纯界面，数据格式无变化。
 - **2026-09-20 v0.3.20**：**编辑器三行 + 状态循环按钮（改 §5.7）。** 修改建议：用户要 `【文本框】 / 开始 完成 ✅状态 / 所在文件` 三段；且要能在编辑器里直接切状态，而非只读派生。实施方案：①第一行 `.edit-area` textarea 不变；②第二行 `.edit-row` = 开始 + 完成 + **`.status-btn`**（盒图标+中文名，点按 待办→进行中→完成→待办 循环，底层只写开始/完成日期——进行中补今天、完成补今天保留开始、回待办清空，日期仍是唯一事实源）；③第三行 `.edit-loc-field` 所在文件独占整行（输入框 flex:1）；④操作行去掉只读盒子/提示、按钮右对齐；删 `.edit-state`/`.edit-hint`、`.edit-loc` 固定宽度。`src/styles.css` 加 `.status-btn`/`.edit-loc-field`，文件头版本引用升至 v0.3.20。纯界面，数据格式无变化。
