@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.1（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.2（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -348,17 +348,16 @@ h1 {
 .box-done:not(:disabled):hover {
   background: var(--c-done);
 }
-/* 完成勾用 CSS 边框绘制，避免字形在部分平台渲染成衬线体 */
-.box-done .box-sym {
-  font-size: 0;
-}
-.box-done .box-sym::before {
-  content: '';
-  width: 8px;
-  height: 4px;
-  border-left: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
-  transform: rotate(-45deg) translate(-1px, -1px);
+/* 完成勾是内联 SVG（几何与线宽在 App.tsx 的 DoneCheck 里）。
+   尺寸取 --fs-label，与 / > < 字形同源：字形占多大，勾就占多大，
+   字形 token 一变勾自动跟随，不会单独漂移。
+   居中由 .box 与 .box-sym 的 flex 居中完成——SVG 的墨迹包围盒以
+   viewBox 中心 (6,6) 为心，故 flex 居中即勾居中。
+   不再用 CSS 边框拼 L 形：那种做法的包围盒中心与旋转原点不重合。 */
+.box-check {
+  display: block;
+  width: var(--fs-label);
+  height: var(--fs-label);
 }
 
 /* ---------- 迁移菜单 ---------- */

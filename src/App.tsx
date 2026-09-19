@@ -9,13 +9,57 @@ function today(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
-/** 状态 → box 内符号（the-boxes 的品牌就是这五个盒子） */
+/** 状态 → box 内符号（the-boxes 的品牌就是这五个盒子）
+ *  done 不使用此处的字形，改由 <DoneCheck /> 矢量绘制，见下。 */
 const STATE_SYMBOL: Record<TodoState, string> = {
   todo: '',
   doing: '/',
   done: '✓',
   deferred: '>',
   scheduled: '<',
+}
+
+/** 完成勾的线宽（单位与 viewBox 一致，1 单位 = 1 CSS px）。
+ *  0.9 来自与同一行里 `/` `>` `<` 三个字形（12px/500）的实测对齐，
+ *  量法是覆盖率场 α≥0.5 下的垂直剖面（16 倍设备像素比截图）：
+ *      / = 0.807 · > = 0.942 · < = 0.940  （CSS px，按符号取均值 0.896）
+ *  取 0.9 与字形整体均值差 +0.004px，是"和别的符号一样粗"的解。
+ *  box 自身描边为 1.5px，故勾不会比外圈更抢眼。 */
+const CHECK_STROKE = 0.9
+
+/**
+ * 完成勾：矢量绘制。
+ *
+ * 为什么不用 `✓` 字形：该字形在部分平台会落到衬线体字体，形态不可控。
+ * 为什么不用 CSS 边框拼 L 形：它的线宽被边框宽度绑死（1px 边框 = 两条 1px 的
+ * 边，勾因此变成 2px，比所有字形粗一倍），且 L 形绕自身中心旋转 45° 后
+ * 「墨迹包围盒中心」与旋转原点不重合（实测偏左 1.4px、偏下 0.7px），
+ * 只能靠 translate 补一个随尺寸漂移的魔数。
+ *
+ * 几何：viewBox 12×12，墨迹包围盒以 (6,6) 为心 ——
+ * 三点 x∈[2.2,9.8]、y∈[3,9]，加上 round cap 的 CHECK_STROKE/2 外扩后仍以 (6,6) 为心。
+ * 因此 SVG 只要被 flex 居中，勾就是居中的（实测中心偏差 0.00 CSS px）。
+ * 尺寸不写在这里：由 `.box-check { width: var(--fs-label) }` 统一给出，
+ * 避免同一个数值存在两处来源。
+ */
+function DoneCheck() {
+  return (
+    <svg
+      className="box-check"
+      viewBox="0 0 12 12"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <polyline
+        points="2.2 6.8 4.4 9 9.8 3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={CHECK_STROKE}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
 }
 /** 点击三态循环：只走到完成，停在 [x]，不回环 */
 const STATE_CYCLE: TodoState[] = ['todo', 'doing', 'done']
@@ -176,7 +220,7 @@ export default function App() {
                   aria-label={`状态：${t.state}`}
                 >
                   <span className="box-sym" key={t.state}>
-                    {STATE_SYMBOL[t.state]}
+                    {t.state === 'done' ? <DoneCheck /> : STATE_SYMBOL[t.state]}
                   </span>
                 </button>
                 <span className="text">
