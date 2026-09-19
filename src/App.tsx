@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, type BoxesInfo, type SourcedTodo, type TaskSummary } from './api'
+import { api, type BoxesInfo, type SourcedTodo, type TaskSummary, type TodoSource } from './api'
 import { parseInbox, parseTask, type TaskMeta, type TodoState } from './lib/parser'
 
 /**
@@ -359,6 +359,194 @@ function MiniCalendar(props: {
   )
 }
 
+/** 编辑态目标 AddTarget → 接口用 TodoSource（newTask 落当前月新任务文件）。null = 不移动。 */
+function resolveTarget(loc: AddTarget | null): TodoSource | null {
+  if (!loc) return null
+  if (loc.kind === 'day') return { kind: 'day', date: loc.date }
+  if (loc.kind === 'task') return { kind: 'task', month: loc.month, slug: loc.slug }
+  return { kind: 'task', month: today().slice(0, 7), slug: loc.name }
+}
+
+/** 当前所在文件的显示名（编辑器的位置默认值） */
+function sourceName(source: TodoSource, tasks: TaskSummary[]): string {
+  if (source.kind === 'day') return source.date
+  return tasks.find((t) => t.month === source.month && t.slug === source.slug)?.title || source.slug
+}
+
+/**
+ * 双击行进入的内联编辑器：改描述、改开始/完成时间（状态由时间派生）、改所在位置（`@`，换文件即整行移动）。
+ * 保存失败留在编辑态不吞输入；Esc / 取消放弃，描述框回车提交。
+ */
+function TodoEditor(props: {
+  todo: SourcedTodo
+  tasks: TaskSummary[]
+  days: string[]
+  onSave: () => void
+  onCancel: () => void
+}) {
+  const { todo, tasks, days, onSave, onCancel } = props
+  const [text, setText] = useState(todo.text)
+  const [start, setStart] = useState(todo.startDate ?? '')
+  const [done, setDone] = useState(todo.doneDate ?? '')
+  const [loc, setLoc] = useState<AddTarget | null>(null)
+  const [locDraft, setLocDraft] = useState('')
+  const [locActive, setLocActive] = useState(0)
+  const locRef = useRef<HTMLInputElement | null>(null)
+
+  const atQuery = /@([^\s@]*)$/.exec(locDraft)?.[1] ?? null
+  const candidates = atQuery === null ? [] : buildAtCandidates(atQuery, tasks, days)
+  const menuShown = atQuery !== null && candidates.length > 0
+  const activeIdx = menuShown ? Math.min(locActive, candidates.length - 1) : 0
+
+  const derived: TodoState = done ? 'done' : start ? 'doing' : 'todo'
+
+  const pickLoc = (c: AtCand) => {
+    setLoc(c.target)
+    setLocDraft((d) => d.replace(/@([^\s@]*)$/, '').replace(/\s+$/, ''))
+    setLocActive(0)
+    locRef.current?.focus()
+  }
+  const onLocKey = (e: import('react').KeyboardEvent<HTMLInputElement>) => {
+    if (!menuShown) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setLocActive((a) => Math.min(a + 1, candidates.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setLocActive((a) => Math.max(a - 1, 0))
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault()
+      pickLoc(candidates[activeIdx])
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setLocDraft((d) => d.replace(/@([^\s@]*)$/, ''))
+    }
+  }
+
+  const save = async () => {
+    if (!todo.id) return
+    const target = resolveTarget(loc)
+    try {
+      await api.editTodo(todo.source, todo.id, {
+        text,
+        start: start || null,
+        done: done || null,
+        ...(target ? { target } : {}),
+      })
+    } catch {
+      return // 保存失败：留在编辑态，不吞输入
+    }
+    onSave()
+  }
+
+  return (
+    <div className="edit" onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel() } }}>
+      <div className="edit-line">
+        <span className={'box box-' + derived} aria-hidden>
+          <span className="box-sym">
+            {derived === 'done' ? <DoneCheck /> : derived === 'doing' ? <DoingHalf /> : null}
+          </span>
+        </span>
+        <input
+          className="edit-text"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              save()
+            }
+          }}
+          placeholder="描述"
+          autoFocus
+          aria-label="描述"
+        />
+      </div>
+      <div className="edit-fields">
+        <label className="edit-field">
+          <span className="edit-cap">开始</span>
+          <input type="date" value={start} onChange={(e) => setStart(e.target.value)} aria-label="开始日期" />
+          {start && (
+            <button type="button" className="edit-clear" onClick={() => setStart('')} aria-label="清除开始日期">
+              ×
+            </button>
+          )}
+        </label>
+        <label className="edit-field">
+          <span className="edit-cap">完成</span>
+          <input type="date" value={done} onChange={(e) => setDone(e.target.value)} aria-label="完成日期" />
+          {done && (
+            <button type="button" className="edit-clear" onClick={() => setDone('')} aria-label="清除完成日期">
+              ×
+            </button>
+          )}
+        </label>
+      </div>
+      <div className="loc-wrap">
+        <div className="add-line">
+          {loc ? (
+            <button type="button" className="add-target" onClick={() => setLoc(null)} aria-label="恢复原位置">
+              <span className="add-target-x" aria-hidden>
+                ×
+              </span>
+              {targetLabel(loc)}
+            </button>
+          ) : (
+            <span className="loc-cur">
+              {sourceName(todo.source, tasks)}
+            </span>
+          )}
+          <input
+            ref={locRef}
+            className="add-input"
+            type="text"
+            value={locDraft}
+            onChange={(e) => {
+              setLocDraft(e.target.value)
+              setLocActive(0)
+            }}
+            onKeyDown={onLocKey}
+            placeholder={loc ? '@ 换到别处' : '@ 移到任务 / 日期'}
+            aria-label="所在位置"
+            autoComplete="off"
+          />
+        </div>
+        {menuShown && (
+          <ul className="at-menu" role="listbox" aria-label="移动目标">
+            {candidates.map((c, i) => (
+              <li
+                key={c.key}
+                role="option"
+                aria-selected={i === activeIdx}
+                className={'at-item' + (c.target.kind === 'newTask' ? ' at-new' : '') + (i === activeIdx ? ' is-active' : '')}
+                onMouseEnter={() => setLocActive(i)}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  pickLoc(c)
+                }}
+              >
+                <span className="at-label">{c.label}</span>
+                {c.hint && <span className="at-hint">{c.hint}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <div className="edit-actions">
+        <span className="edit-hint">{STATE_LABEL[derived]}</span>
+        <div className="edit-btns">
+          <button type="button" className="btn" onClick={onCancel}>
+            取消
+          </button>
+          <button type="button" className="btn btn-primary" onClick={save}>
+            保存
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const [days, setDays] = useState<string[]>([])
   const [tasks, setTasks] = useState<TaskSummary[]>([])
@@ -378,6 +566,8 @@ export default function App() {
   // `@` 下拉键盘高亮项下标
   const [active, setActive] = useState(0)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  // 正在编辑的行的 key（source+id），null = 无。双击行进入，保存/取消退出。
+  const [editingKey, setEditingKey] = useState<string | null>(null)
 
   const loadDay = async (date: string) => {
     const day = await api.getDay(date)
@@ -579,56 +769,78 @@ export default function App() {
   const inboxFile = `${dataRoot}/inbox/${view?.kind === 'day' ? view.date : '日期'}.md`
 
   /** 单行 todo 的渲染（平铺分组与筛选视图共用；i 是 todos 的全局下标，重排靠它定位） */
-  const renderTodo = (t: SourcedTodo, i: number) => (
-    <li
-      key={t.id ?? i}
-      className={`todo todo-${t.state}`}
-      style={{ '--i': i } as import('react').CSSProperties}
-      draggable={!!t.id}
-      onDragStart={() => {
-        if (t.id) drag.current = { index: i, id: t.id, source: t.source }
-      }}
-      onDragEnd={() => {
-        drag.current = null
-      }}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={() => onDrop(i)}
-    >
-      <button
-        className={`box box-${t.state}`}
-        disabled={!t.id}
-        onClick={() => cycleState(t, i)}
-        aria-label={boxAriaLabel(t.state)}
+  const renderTodo = (t: SourcedTodo, i: number) => {
+    const key = (t.source.kind === 'day' ? 'd' + t.source.date : 't' + t.source.month + '/' + t.source.slug) + ':' + t.id
+    if (t.id && key === editingKey) {
+      return (
+        <li key={t.id} className="todo todo-editing">
+          <TodoEditor
+            todo={t}
+            tasks={tasks}
+            days={days}
+            onSave={() => {
+              setEditingKey(null)
+              api.listDays().then(setDays).catch(() => {})
+              api.listTasks().then(setTasks).catch(() => {})
+              refreshView()
+            }}
+            onCancel={() => setEditingKey(null)}
+          />
+        </li>
+      )
+    }
+    return (
+      <li
+        key={t.id ?? i}
+        className={`todo todo-${t.state}`}
+        style={{ '--i': i } as import('react').CSSProperties}
+        draggable={!!t.id}
+        onDoubleClick={() => t.id && setEditingKey(key)}
+        onDragStart={() => {
+          if (t.id) drag.current = { index: i, id: t.id, source: t.source }
+        }}
+        onDragEnd={() => {
+          drag.current = null
+        }}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={() => onDrop(i)}
       >
-        <span className="box-sym" key={t.state}>
-          {t.state === 'done' ? (
-            <DoneCheck />
-          ) : t.state === 'doing' ? (
-            <DoingHalf />
-          ) : null}
-        </span>
-      </button>
-      <span className="text">
-        {t.text}
-        {/* 日期注记：沿用文件里的 ISO 日期（与 Markdown 原文对得上）和原始措辞。
-            这是 §5.1「界面不用 emoji / 不用破折号拼注记」的既定例外。 */}
-        {t.startDate && (
-          <span className="done-note">
-            {' '}
-            ——始于 {t.startDate} 🛫
-            {t.doneDate && <>，完成于 {t.doneDate} 🎉</>}
+        <button
+          className={`box box-${t.state}`}
+          disabled={!t.id}
+          onClick={() => cycleState(t, i)}
+          aria-label={boxAriaLabel(t.state)}
+        >
+          <span className="box-sym" key={t.state}>
+            {t.state === 'done' ? (
+              <DoneCheck />
+            ) : t.state === 'doing' ? (
+              <DoingHalf />
+            ) : null}
           </span>
-        )}
-        {!t.startDate && t.doneDate && (
-          <span className="done-note"> ——完成于 {t.doneDate} 🎉</span>
-        )}
-      </span>
-      {/* 元数据保留文件里的完整值，便于与 inbox 原文对应（§5.1）：
-          日期用完整 ISO（那也是当日的文件名），任务统一用 @ 记号。 */}
-      {t.task && <span className="chip chip-task">@{t.task}</span>}
-      {t.date && <span className="chip chip-date">@{t.date}</span>}
-    </li>
-  )
+        </button>
+        <span className="text">
+          {t.text}
+          {/* 日期注记：沿用文件里的 ISO 日期（与 Markdown 原文对得上）和原始措辞。
+              这是 §5.1「界面不用 emoji / 不用破折号拼注记」的既定例外。 */}
+          {t.startDate && (
+            <span className="done-note">
+              {' '}
+              ——始于 {t.startDate} 🛫
+              {t.doneDate && <>，完成于 {t.doneDate} 🎉</>}
+            </span>
+          )}
+          {!t.startDate && t.doneDate && (
+            <span className="done-note"> ——完成于 {t.doneDate} 🎉</span>
+          )}
+        </span>
+        {/* 元数据保留文件里的完整值，便于与 inbox 原文对应（§5.1）：
+            日期用完整 ISO（那也是当日的文件名），任务统一用 @ 记号。 */}
+        {t.task && <span className="chip chip-task">@{t.task}</span>}
+        {t.date && <span className="chip chip-date">@{t.date}</span>}
+      </li>
+    )
+  }
 
   const todayStr = today()
 

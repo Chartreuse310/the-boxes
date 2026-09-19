@@ -12,6 +12,8 @@ import {
   setTodoStateInFile,
   taskPath,
   touchDay,
+  updateTodo,
+  type TodoSourceRef,
   type TodoState,
 } from './server/store'
 import { parseInbox, parseTask } from './src/lib/parser'
@@ -186,6 +188,26 @@ function boxesApi(dataDir: string): Plugin {
             const text = String(body.text ?? '')
             const { id } = await addTodo(dataDir, ma[1], text)
             return { ok: true, id }
+          })
+          return
+        }
+
+        // PUT /api/todos/edit : 编辑一行（双击行 → 内联编辑器保存）
+        // body = { source, id, text?, start?, done?, target? }；start/done 传 null 清除、缺省不动。
+        // source/target 为 {kind:'day',date} 或 {kind:'task',month,slug}；target 与 source 不同即整行移动。
+        if (req.method === 'PUT' && /^\/todos\/edit$/.test(pathname)) {
+          handle(async () => {
+            const b = await readBody()
+            const src = b.source as TodoSourceRef | undefined
+            const id = String(b.id ?? '')
+            if (!src || !id) throw new Error('缺少 source 或 id')
+            const patch: { text?: string; start?: string | null; done?: string | null; target?: TodoSourceRef } = {}
+            if ('text' in b) patch.text = String(b.text ?? '')
+            if ('start' in b) patch.start = b.start == null ? null : String(b.start)
+            if ('done' in b) patch.done = b.done == null ? null : String(b.done)
+            if (b.target) patch.target = b.target as TodoSourceRef
+            await updateTodo(dataDir, src, id, patch)
+            return { ok: true }
           })
           return
         }

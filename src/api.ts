@@ -84,6 +84,16 @@ export interface BoxesApi {
   taskReorder(month: string, slug: string, order: string[]): Promise<void>
   /** 平铺视图：全部 todo（inbox 日期倒序在前，任务按提出日倒序在后），各附来源 */
   listAll(): Promise<SourcedTodo[]>
+  /**
+   * 编辑一行 todo（双击行 → 内联编辑器保存）。
+   * patch.text 改正文；start/done 改 @start/@done（`null` 清除，`undefined` 不动，状态由时间派生）；
+   * target 改所在文件，与来源不同即整行移动过去。
+   */
+  editTodo(
+    source: TodoSource,
+    id: string,
+    patch: { text?: string; start?: string | null; done?: string | null; target?: TodoSource },
+  ): Promise<void>
 }
 
 const httpApi: BoxesApi = {
@@ -186,6 +196,14 @@ const httpApi: BoxesApi = {
     const r = await fetch('/api/all')
     if (!r.ok) throw new Error(`listAll 失败：${r.status}`)
     return (await r.json()).todos
+  },
+  editTodo: async (source, id, patch) => {
+    const r = await fetch('/api/todos/edit', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source, id, ...patch }),
+    })
+    if (!r.ok) throw new Error(`editTodo 失败：${r.status} ${await r.text()}`)
   },
 }
 

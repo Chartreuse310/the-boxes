@@ -4,8 +4,14 @@
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import path from 'node:path'
+import { parseInbox } from '../src/lib/parser'
 
 export type TodoState = 'todo' | 'doing' | 'done'
+
+/** todo 所在文件的定位（inbox 某日 / 任务某月某名）——编辑与移动的通用参数 */
+export type TodoSourceRef =
+  | { kind: 'day'; date: string }
+  | { kind: 'task'; month: string; slug: string }
 
 const STATE_CHAR: Record<TodoState, string> = {
   todo: ' ',
@@ -309,8 +315,7 @@ export async function addTodo(
 /**
  * 向任务文件添加一条 todo（界面输入框 `@任务` 路由，或选中「创建任务」）。
  * 归属由所在文件决定，故只写 `- [ ] 正文 ^id`，不带 `+任务`/`@日期` token（SPEC v2.2 精神）。
- * 任务文件不存在则按 SPEC §5 建骨架（`# 任务：` + 状态/提出 + `## todos`），提出日期取该月内的
- * 今天（month 非当前月时退而取月初 `${month}-01`）。month/slug 经 taskPath 校验（slug 不含空格）。
+ * 任务文件不存在则按 SPEC §5 建骨架。month/slug 经 taskPath 校验（slug 不含空格）。
  */
 export async function addTaskTodo(
   dataDir: string,
@@ -319,15 +324,7 @@ export async function addTaskTodo(
   text: string,
 ): Promise<{ id: string }> {
   const file = taskPath(dataDir, month, slug) // 非法 month/slug 直接抛出
-  let content: string
-  try {
-    content = await readFile(file, 'utf8')
-  } catch {
-    const created = month === localDate().slice(0, 7) ? localDate() : `${month}-01`
-    await mkdir(path.dirname(file), { recursive: true })
-    content = `# 任务：${slug}\n\n**状态**：进行中\n**提出**：${created}\n\n## todos\n\n`
-    await writeFile(file, content)
-  }
+  const content = await ensureTaskFile(dataDir, month, slug)
 
   const body = text.trim().replace(/\s+/g, ' ').trim()
   if (!body) throw new Error('todo 内容为空')
@@ -345,4 +342,119 @@ export async function addTaskTodo(
   const base = content === '' || content.endsWith('\n') ? content : content + '\n'
   await writeFile(file, `${base}- [ ] ${body} ^${id}\n`)
   return { id }
+}
+
+/** 任务文件绝对路径（校验后）。 */
+function fileFor(dataDir: string, src: TodoSourceRef): string {
+  return src.kind === 'day' ? inboxPath(dataDir, assertDay(src.date)) : taskPath(dataDir, src.month, src.slug)
+}
+
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/
+function assertDay(date: string): string {
+  if (!DAY_RE.test(date)) throw new Error(`非法日期：${date}`)
+  return date
+}
+
+function sameSrc(a: TodoSourceRef, b: TodoSourceRef): boolean {
+  if (a.kind !== b.kind) return false
+  if (a.kind === 'day') return b.kind === 'day' && a.date === b.date
+  return b.kind === 'task' && a.month === b.month && a.slug === b.slug
+}
+
+/** 任务文件：存在则读，缺失则按 SPEC §5 建骨架后返回其内容。 */
+async function ensureTaskFile(dataDir: string, month: string, slug: string): Promise<string> {
+  const file = taskPath(dataDir, month, slug)
+  try {
+    return await readFile(file, 'utf8')
+  } catch {
+    const created = month === localDate().slice(0, 7) ? localDate() : `${month}-01`
+    await mkdir(path.dirname(file), { recursive: true })
+    const content = `# 任务：${slug}\n\n**状态**：进行中\n**提出**：${created}\n\n## todos\n\n`
+    await writeFile(file, content)
+    return content
+  }
+}
+
+/** 日文件：存在则读，缺失则 touchDay 建空文件（含标题）后返回。 */
+async function ensureDayFile(dataDir: string, date: string): Promise<string> {
+  const file = inboxPath(dataDir, assertDay(date))
+  try {
+    return await readFile(file, 'utf8')
+  } catch {
+    await touchDay(dataDir, date)
+    return await readFile(file, 'utf8')
+  }
+}
+
+/**
+ * 编辑一行 todo（双击行 → 内联编辑器保存）。
+ * patch：text 改正文；start/done 改 @start/@done（`null` 清除、`undefined` 不动）；
+ * target 改所在文件（与来源相同则原地保存，否则整行移动到目标文件，id 保留、撞车则换新）。
+ * 状态由时间派生：有 done→done，否则有 start→doing，否则 todo（「清除开始时间且无完成时间即回未开始」等）。
+ * 保留行内既有的 legacy `+任务`/`@日期` token（SPEC §7 容错），只重写受控字段并按 §4 规范顺序排布。
+ */
+export async function updateTodo(
+  dataDir: string,
+  source: TodoSourceRef,
+  id: string,
+  patch: { text?: string; start?: string | null; done?: string | null; target?: TodoSourceRef },
+): Promise<void> {
+  const srcFile = fileFor(dataDir, source)
+  const lines = (await readFile(srcFile, 'utf8')).split('\n')
+  const idx = lines.findIndex((l) => LINE_RE.test(l) && l.match(ID_RE)?.[2] === id)
+  if (idx === -1) throw new Error(`todo 不存在：^${id}`)
+  const parsed = parseInbox(lines[idx])[0]
+  if (!parsed) throw new Error(`行解析失败：^${id}`)
+
+  const start = patch.start === undefined ? parsed.startDate : patch.start
+  const done = patch.done === undefined ? parsed.doneDate : patch.done
+  if (start && !DAY_RE.test(start)) throw new Error(`非法开始日期：${start}`)
+  if (done && !DAY_RE.test(done)) throw new Error(`非法完成日期：${done}`)
+  const text = (patch.text === undefined ? parsed.text : patch.text).trim().replace(/\s+/g, ' ').trim()
+  if (!text) throw new Error('todo 内容为空')
+  const state: TodoState = done ? 'done' : start ? 'doing' : 'todo'
+
+  // §4 规范顺序：正文 +任务 @start @日期 @done ^id（task/date 为 legacy，原样保留）
+  let line = `- [${STATE_CHAR[state]}] ${text}`
+  if (parsed.task) line += ` +${parsed.task}`
+  if (start) line += ` @start:${start}`
+  if (parsed.date) line += ` @${parsed.date}`
+  if (done) line += ` @done:${done}`
+  line += ` ^${id}`
+
+  const target = patch.target
+  if (!target || sameSrc(target, source)) {
+    lines[idx] = line
+    await writeFile(srcFile, lines.join('\n'))
+    return
+  }
+
+  // 移动到别的文件：校验 + 写目标在前、删源在后（宁可重复也不丢行）。
+  const tgtFile = fileFor(dataDir, target) // 非法 target 在动源之前抛出
+  const tgtContent =
+    target.kind === 'day'
+      ? await ensureDayFile(dataDir, target.date)
+      : await ensureTaskFile(dataDir, target.month, target.slug)
+  const existing = new Set<string>()
+  for (const raw of tgtContent.split('\n')) {
+    const m = raw.match(ID_RE)
+    if (m) existing.add(m[2])
+  }
+  let finalId = id
+  if (existing.has(finalId)) {
+    do {
+      finalId = randomId()
+    } while (existing.has(finalId))
+    line = line.replace(/\^[a-z0-9]+$/i, `^${finalId}`)
+  }
+  const base = tgtContent === '' || tgtContent.endsWith('\n') ? tgtContent : tgtContent + '\n'
+  await writeFile(tgtFile, `${base}${line}\n`)
+
+  // 目标已落，安全地从源删行
+  const srcLines = (await readFile(srcFile, 'utf8')).split('\n')
+  const srcIdx = srcLines.findIndex((l) => LINE_RE.test(l) && l.match(ID_RE)?.[2] === id)
+  if (srcIdx !== -1) {
+    srcLines.splice(srcIdx, 1)
+    await writeFile(srcFile, srcLines.join('\n'))
+  }
 }
