@@ -1,6 +1,6 @@
 # the-boxes · 开发与易用性测试计划
 
-> 版本 v0.2.21 · 2026-09-20 · 本文是活文档，每个里程碑结束时回顾更新，变更见文末【变更日志】
+> 版本 v0.2.22 · 2026-09-20 · 本文是活文档，每个里程碑结束时回顾更新，变更见文末【变更日志】
 
 ## 1. 产品定义
 
@@ -338,6 +338,8 @@ the-boxes/                # 开源代码仓库
 - `package.json` 中 `"version": "0.0.1"` 即当前项目版本号，规则以此章为准；`M1` 里程碑 = 未来 `v0.1.x` 线，尚未开启
 
 ## 变更日志
+
+- **2026-09-20** v0.2.22：日期注记换行策略——标题首行、注记次行（纯排版，配合 style-guide v0.3.18）。修改建议：`——始于…🎉` 注记较长，行内拼在标题后需要换行时会和标题尾巴挤一起/让出首行。实施方案：标题 `.todo-title` 与注记 `.done-note` 各 `display:block`（注记 `nowrap` 整块不拆断、去 `margin-left`、`margin-top:1px`；窄屏放开 `normal`）；App 里标题文字包一层 `.todo-title`、注记去前导空格。仍是无胶囊行内灰字，不改数据格式。
 
 - **2026-09-20** v0.2.21：上手示例（空目录首开自动铺，一键清空）。修改建议：新人 clone 后 `pnpm dev` 打开是空屏 + 空态，得照 README 手写 Markdown 才看到东西，违背"打开即用"。实施方案：①`store` 加 `seedOnboardingIfEmpty`（有 marker 或有真实数据则跳过；空则写今日 inbox + `tasks/当月/示例任务.md`，`ensureIdsInFile` 给示例行补 id 使其可点/编辑/拖），`clearOnboarding`/`getOnboarding` + 数据目录根标记 `.boxes-onboarding.json`（记铺过哪些文件、清空后置 `files:[]` 不再自动铺）；②开发服务器 `configureServer` 启动时 `await` 播种（避开前端时序竞态；Tauri 侧改由 Rust 启动做）；③`GET /api/onboarding` + `POST /api/onboarding/clear`；④App 顶部横幅「清空示例」（`style-guide §5.8` v0.3.17），清空后重载列表/视图。SPEC §3 补 `.boxes-onboarding.json` 为工具元数据（扫描忽略）→ **SPEC v2.3**。数据行格式/任务格式不变；M1 范围补「上手示例」项。
 

@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.17（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.18（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -740,6 +740,11 @@ h1 {
   min-width: 0;
   font-size: var(--fs-body);
 }
+/* 标题独占首行；日期注记（若有）另起一行——落实「换行时优先标题在第一行、注记单独成行」。
+   注记仍无胶囊、无删除线，只是从行内挪到标题下一行。 */
+.todo-title {
+  display: block;
+}
 
 /* 完成项：降一级文本层级（用字色而非删除线，沿用 Minimal 方法） */
 .todo-done .text {
@@ -850,9 +855,11 @@ h1 {
 }
 
 /* ---------- 完成/开始日期注记 ---------- */
+/* 标题下一行、整块不换行（nowrap，不拆断日期/emoji）。仍无胶囊、无删除线（§5.1 例外）。 */
 .done-note {
+  display: block;
+  margin-top: 1px;
   color: var(--text-secondary);
-  margin-left: 4px;
   font-size: var(--fs-meta);
   white-space: nowrap;
 }

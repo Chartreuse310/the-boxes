@@ -821,18 +821,18 @@ export default function App() {
           </span>
         </button>
         <span className="text">
-          {t.text}
+          <span className="todo-title">{t.text}</span>
           {/* 日期注记：沿用文件里的 ISO 日期（与 Markdown 原文对得上）和原始措辞。
-              这是 §5.1「界面不用 emoji / 不用破折号拼注记」的既定例外。 */}
+              这是 §5.1「界面不用 emoji / 不用破折号拼注记」的既定例外。
+              与标题同处 flex-wrap：放得下就同行，放不下整条注记折到新行（标题保持首行）。 */}
           {t.startDate && (
             <span className="done-note">
-              {' '}
               ——始于 {t.startDate} 🛫
               {t.doneDate && <>，完成于 {t.doneDate} 🎉</>}
             </span>
           )}
           {!t.startDate && t.doneDate && (
-            <span className="done-note"> ——完成于 {t.doneDate} 🎉</span>
+            <span className="done-note">——完成于 {t.doneDate} 🎉</span>
           )}
         </span>
         {/* 元数据保留文件里的完整值，便于与 inbox 原文对应（§5.1）：
