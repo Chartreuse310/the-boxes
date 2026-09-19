@@ -6,7 +6,21 @@ export interface RawDay {
   content: string
 }
 
+/** 运行环境信息。footer 用它显示数据目录与版本，界面里不存这两个值。 */
+export interface BoxesInfo {
+  /** 实际生效的数据目录（绝对路径） */
+  dataDir: string
+  /** 用户主目录，供界面把 dataDir 缩写成 ~/… */
+  home: string
+  /** 软件版本，来自 package.json */
+  version: string | null
+  /** 数据格式版本，来自 SPEC.md */
+  specVersion: string | null
+}
+
 export interface BoxesApi {
+  /** 运行环境信息（数据目录、版本） */
+  info(): Promise<BoxesInfo>
   /** 有记录的日期列表，倒序（最新在前） */
   listDays(): Promise<string[]>
   /** 读取某日 inbox 的原文 markdown；文件不存在返回 null */
@@ -20,6 +34,11 @@ export interface BoxesApi {
 }
 
 const httpApi: BoxesApi = {
+  info: async () => {
+    const r = await fetch('/api/info')
+    if (!r.ok) throw new Error(`info 失败：${r.status}`)
+    return r.json()
+  },
   listDays: async () => {
     const r = await fetch('/api/days')
     if (!r.ok) throw new Error(`listDays 失败：${r.status}`)

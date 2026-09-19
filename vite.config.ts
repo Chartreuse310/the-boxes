@@ -43,7 +43,35 @@ function resolveDataDir(mode: string): string {
 }
 
 /**
+ * 运行环境信息：数据目录 + 版本号。
+ *
+ * 版本号必须现读，不能硬编码在界面里 —— footer 原来写死 "SPEC v1.0"，
+ * SPEC 升到 v1.2 后没人记得改，界面就开始说谎（style-guide v0.3.3 的成因）。
+ */
+async function readVersions(): Promise<{ version: string | null; specVersion: string | null }> {
+  const read = async (rel: string): Promise<string | null> => {
+    try {
+      return await readFile(path.join(process.cwd(), rel), 'utf8')
+    } catch {
+      return null // 读不到就不显示，不报错
+    }
+  }
+  const pkg = await read('package.json')
+  const spec = await read('SPEC.md')
+  let version: string | null = null
+  if (pkg) {
+    try {
+      version = JSON.parse(pkg).version ?? null
+    } catch {
+      version = null
+    }
+  }
+  return { version, specVersion: spec?.match(/SPEC v(\d+\.\d+(?:\.\d+)?)/)?.[1] ?? null }
+}
+
+/**
  * 开发期本地文件 API（M1 打包 Tauri 时由 Rust 侧实现同样的接口，界面代码不动）：
+ *   GET /api/info        → { dataDir, home, version, specVersion } 运行环境信息
  *   GET /api/days        → ["2026-09-19", ...] 有记录的日期，倒序
  *   GET /api/days/:date  → { date, content } 该日 inbox 的原文 markdown
  *
@@ -82,6 +110,12 @@ function boxesApi(dataDir: string): Plugin {
         }
 
         const pathname = (req.url ?? '/').split('?')[0]
+
+        // GET /api/info : 数据目录与版本。界面 footer 显示它们，值必须来自这里（不许硬编码）
+        if (req.method === 'GET' && /^\/info\/?$/.test(pathname)) {
+          readVersions().then((v) => send(200, { dataDir, home: process.env.HOME ?? '', ...v }))
+          return
+        }
 
         if (req.method === 'GET' && /^\/days\/?$/.test(pathname)) {
           readdir(path.join(dataDir, 'inbox'))
