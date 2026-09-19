@@ -295,8 +295,10 @@ export default function App() {
                     <span className="done-note"> ——完成于 {t.doneDate} 🎉</span>
                   )}
                 </span>
-                {t.task && <span className="chip chip-task">{t.task}</span>}
-                {t.date && <span className="chip chip-date">{fmtDate(t.date)}</span>}
+                {/* 元数据保留文件里的完整值，便于与 inbox 原文对应（§5.1）：
+                    日期用完整 ISO（那也是当日的文件名），任务统一用 @ 记号。 */}
+                {t.task && <span className="chip chip-task">@{t.task}</span>}
+                {t.date && <span className="chip chip-date">@{t.date}</span>}
 
                 {t.id && (
                   <div className="menu-wrap">
