@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.18（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.19（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -563,32 +563,42 @@ h1 {
   flex-direction: column;
   gap: 10px;
 }
-/* 编辑器主行：状态盒（开头）+ 描述（全宽）+ 所在文件下拉（尾端，前置分隔线） */
-.edit-main .box {
-  flex: none;
+/* 第一行：描述——多行文本框（surface 底 + border-control 描边，focus 环同 §5.2） */
+.edit-area {
+  width: 100%;
+  font: inherit;
+  font-size: var(--fs-body);
+  color: var(--text);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-control);
+  padding: 8px 12px;
+  line-height: 1.5;
+  min-height: 2.6em;
+  resize: vertical;
 }
-.edit-desc {
-  flex: 1 1 auto;
-  min-width: 6ch;
+.edit-area::placeholder {
+  color: var(--text-secondary);
 }
-.edit-loc {
-  flex: none;
-  width: 13em;
-  padding-left: 12px;
-  margin-left: 2px;
-  border-left: 1px solid var(--divider);
+.edit-area:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-focus);
 }
-@media (max-width: 720px) {
-  .edit-loc {
-    width: 9em;
-  }
-}
-
-.edit-fields {
+/* 第二行：所在文件 / 开始 / 完成 并排（可换行） */
+.edit-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 16px;
+}
+.edit-loc {
+  width: 14em;
+}
+@media (max-width: 720px) {
+  .edit-loc {
+    width: 11em;
+  }
 }
 /* 派生态预览：静态标记，去掉按钮态的悬停缩放（底色沿用各态自身） */
 .edit .box {
@@ -607,7 +617,7 @@ h1 {
 .edit-cap {
   flex: none;
 }
-.edit-field input[type='date'] {
+.edit-field input {
   font: inherit;
   font-size: var(--fs-label);
   color: var(--text);
@@ -615,8 +625,9 @@ h1 {
   border: 1px solid var(--border-control);
   border-radius: var(--radius-control);
   padding: 5px 8px;
+  min-width: 0;
 }
-.edit-field input[type='date']:focus-visible {
+.edit-field input:focus-visible {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-focus);
@@ -645,6 +656,11 @@ h1 {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+.edit-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .edit-hint {
   font-size: var(--fs-meta);

@@ -421,54 +421,45 @@ function TodoEditor(props: {
 
   return (
     <div className="edit" onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel() } }}>
-      {/* 一行搞定：开头是派生态状态盒 → 全宽描述 → 尾端所在文件下拉单选（可输入新建、清空回当日） */}
-      <div className="add-line edit-main">
-        <span className={'box box-' + derived} aria-hidden title={STATE_LABEL[derived]}>
-          <span className="box-sym">
-            {derived === 'done' ? <DoneCheck /> : derived === 'doing' ? <DoingHalf /> : null}
-          </span>
-        </span>
-        <input
-          className="add-input edit-desc"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              save()
-            }
-          }}
-          placeholder="描述"
-          autoFocus
-          aria-label="描述"
-        />
-        <input
-          className="add-input edit-loc"
-          list={locId}
-          value={loc}
-          onChange={(e) => setLoc(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              save()
-            }
-          }}
-          placeholder="所在文件"
-          aria-label="所在文件"
-          autoComplete="off"
-        />
-        <datalist id={locId}>
-          {tasks.map((t) => (
-            <option key={`t:${t.month}/${t.slug}`} value={t.slug} label={`${t.month} · ${t.title}`} />
-          ))}
-          {days.map((d) => (
-            <option key={`d:${d}`} value={d} label="日期" />
-          ))}
-        </datalist>
-      </div>
+      {/* 第一行：描述——多行文本框。Enter 换行，⌘/Ctrl+Enter 保存；保存时后端把换行并成空格（todo 仍一行）。 */}
+      <textarea
+        className="edit-area"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+            e.preventDefault()
+            save()
+          }
+        }}
+        placeholder="描述"
+        rows={2}
+        autoFocus
+        aria-label="描述"
+      />
 
-      {/* 起止时间：状态由这两个时间派生（见上面状态盒） */}
-      <div className="edit-fields">
+      {/* 第二行：所在文件 / 开始 / 完成。状态由起止时间派生（见操作行的盒子）。 */}
+      <div className="edit-row">
+        <label className="edit-field">
+          <span className="edit-cap">所在文件</span>
+          <input
+            className="edit-loc"
+            list={locId}
+            value={loc}
+            onChange={(e) => setLoc(e.target.value)}
+            placeholder="日期 / 任务名"
+            aria-label="所在文件"
+            autoComplete="off"
+          />
+          <datalist id={locId}>
+            {tasks.map((t) => (
+              <option key={`t:${t.month}/${t.slug}`} value={t.slug} label={`${t.month} · ${t.title}`} />
+            ))}
+            {days.map((d) => (
+              <option key={`d:${d}`} value={d} label="日期" />
+            ))}
+          </datalist>
+        </label>
         <label className="edit-field">
           <span className="edit-cap">开始</span>
           <input type="date" value={start} onChange={(e) => setStart(e.target.value)} aria-label="开始日期" />
@@ -490,7 +481,14 @@ function TodoEditor(props: {
       </div>
 
       <div className="edit-actions">
-        <span className="edit-hint">{STATE_LABEL[derived]}</span>
+        <span className="edit-state">
+          <span className={'box box-' + derived} aria-hidden title={STATE_LABEL[derived]}>
+            <span className="box-sym">
+              {derived === 'done' ? <DoneCheck /> : derived === 'doing' ? <DoingHalf /> : null}
+            </span>
+          </span>
+          <span className="edit-hint">{STATE_LABEL[derived]}</span>
+        </span>
         <div className="edit-btns">
           <button type="button" className="btn" onClick={onCancel}>
             取消
