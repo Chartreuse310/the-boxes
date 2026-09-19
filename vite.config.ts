@@ -1,14 +1,23 @@
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 /**
- * 数据目录：默认 ~/the-boxes（SPEC §3），可用环境变量 BOXES_DATA_DIR 覆盖。
+ * 数据目录的解析优先级（由高到低）：
+ *   1. 环境变量 BOXES_DATA_DIR
+ *   2. 仓库根目录 .env 里的 BOXES_DATA_DIR
+ *   3. 默认 ~/the-boxes
+ *
+ * 普通用户建议直接在仓库根目录建 .env，写一行 BOXES_DATA_DIR=你要的路径，
+ * 不必配置 shell 环境变量。详见 README「自定义数据目录」。
  */
-const DATA_DIR = process.env.BOXES_DATA_DIR
-  ? path.resolve(process.env.BOXES_DATA_DIR)
-  : path.join(process.env.HOME ?? '.', 'the-boxes')
+function resolveDataDir(mode: string): string {
+  const env = loadEnv(mode, process.cwd(), '')
+  const fromEnv = process.env.BOXES_DATA_DIR ?? env.BOXES_DATA_DIR
+  if (fromEnv) return path.resolve(fromEnv)
+  return path.join(process.env.HOME ?? '.', 'the-boxes')
+}
 
 /**
  * 开发期本地文件 API（M1 打包 Tauri 时由 Rust 侧实现同样的接口，界面代码不动）：
@@ -17,7 +26,7 @@ const DATA_DIR = process.env.BOXES_DATA_DIR
  *
  * 只读、仅本机；日期参数经过正则校验，防止路径穿越。
  */
-function boxesApi(): Plugin {
+function boxesApi(dataDir: string): Plugin {
   return {
     name: 'boxes-dev-api',
     configureServer(server) {
@@ -31,7 +40,7 @@ function boxesApi(): Plugin {
         const pathname = (req.url ?? '/').split('?')[0]
 
         if (req.method === 'GET' && /^\/days\/?$/.test(pathname)) {
-          readdir(path.join(DATA_DIR, 'inbox'))
+          readdir(path.join(dataDir, 'inbox'))
             .then((files) => {
               const days = files
                 .filter((f) => /^\d{4}-\d{2}-\d{2}\.md$/.test(f))
@@ -46,7 +55,7 @@ function boxesApi(): Plugin {
 
         const m = pathname.match(/^\/days\/(\d{4}-\d{2}-\d{2})$/)
         if (req.method === 'GET' && m) {
-          readFile(path.join(DATA_DIR, 'inbox', `${m[1]}.md`), 'utf8')
+          readFile(path.join(dataDir, 'inbox', `${m[1]}.md`), 'utf8')
             .then((content) => send(200, { date: m[1], content }))
             .catch(() => send(404, { error: 'not found' }))
           return
@@ -58,6 +67,9 @@ function boxesApi(): Plugin {
   }
 }
 
-export default defineConfig({
-  plugins: [react(), boxesApi()],
+export default defineConfig(({ mode }) => {
+  const dataDir = resolveDataDir(mode)
+  return {
+    plugins: [react(), boxesApi(dataDir)],
+  }
 })

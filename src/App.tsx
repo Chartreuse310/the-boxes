@@ -95,7 +95,7 @@ export default function App() {
       </main>
 
       <footer className="muted">
-        数据目录 ~/the-boxes · 开发模式：本地文件 API · SPEC v1.0
+        数据=本地 Markdown 文件（路径可在 .env 用 BOXES_DATA_DIR 自定义）· 开发模式 · SPEC v1.0
       </footer>
     </div>
   )

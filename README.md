@@ -78,9 +78,29 @@ pnpm dev
 |---|---|
 | `pnpm dev` | 启动开发界面（本地文件 API） |
 | `pnpm build` | 类型检查 + 构建产物到 `dist/` |
-| `BOXA_DATA_DIR=另一个路径 pnpm dev` | 用指定数据目录代替 `~/the-boxes` |
+| `BOXES_DATA_DIR=路径 pnpm dev` | 用指定数据目录（优先级最高） |
 
 > 当前写操作（添加/打勾/顺延）还没有界面按钮——先直接编辑 `~/the-boxes/inbox/<今天>.md`，保存后界面会展示出来。写操作界面开发中。
+
+### 自定义数据目录
+
+数据默认存在 `~/the-boxes/`。想换地方（比如放进自己的同步盘），两种方式：
+
+**方式 A：`.env` 文件（推荐，无需记命令）**
+
+把 [.env.example](.env.example) 复制为根目录的 `.env`，填上你的路径：
+
+```
+BOXES_DATA_DIR=/Users/你/我的box数据
+```
+
+**方式 B：环境变量**
+
+```bash
+BOXES_DATA_DIR=/Users/你/我的box数据 pnpm dev
+```
+
+优先级：环境变量 > `.env` > 默认 `~/the-boxes`。改了后 `pnpm dev` 会自动用新目录。
 
 ## 目录结构
 
