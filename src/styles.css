@@ -1,62 +1,65 @@
 /* ============================================================
-   the-boxes — 现代轻量待办界面
-   设计系统沿用 Obsidian Minimal（MIT, Steph Ango 2020-2026）：
-   以单一 HSL 基准派生全部中性色。本文为 the-boxes 定制适配。
-   原则：单强调色、克制动效、以"五个 box"为品牌锚点、行即交互。
+   the-boxes — 界面样式
+
+   规范来源：docs/style-guide.md v0.3.1（唯一事实源）
+   本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
+
+   沿用 obsidian-minimal 的四条设计方法（MIT License,
+   Copyright (c) 2020-2024 Steph Ango (@kepano)）：
+     单一 HSL 基准派生中性色 / system-first 字体栈 /
+     圆形 checkbox / 完成项无删除线
+   其余一切数值（色值、字号、间距、圆角）均为本项目自定。
+
+   核心规则（§4.1）：行不是卡片——零边框、零阴影、零背景，
+   靠 0.5px 缩进分隔线分组。弱信号不允许靠叠加来"加强"。
    ============================================================ */
+
 :root {
   color-scheme: light;
 
-  /* 暖纸感 base（而非纯灰），让中性面更柔和不刺眼 */
+  /* ---- 中性色基准：唯一基准，改这里即改整套配色（§2.1）---- */
   --base-h: 38;
   --base-s: 12%;
   --base-l: 97%;
 
   --bg-page: hsl(var(--base-h) var(--base-s) var(--base-l));
-  --bg-card: #ffffff;
+  --bg-surface: #ffffff;
   --bg-hover: hsl(var(--base-h) var(--base-s) calc(var(--base-l) - 4%));
-  --bg-subtle: hsl(var(--base-h) var(--base-s) calc(var(--base-l) - 9%));
-  --bg-code: hsl(var(--base-h) var(--base-s) calc(var(--base-l) - 17%));
+  --bg-sunken: hsl(var(--base-h) var(--base-s) calc(var(--base-l) - 6%));
+  --divider: hsl(var(--base-h) var(--base-s) calc(var(--base-l) - 12%));
+  --border-control: hsl(var(--base-h) var(--base-s) calc(var(--base-l) - 43%));
 
+  /* 只有两个文本层级：比 l-58 更浅的灰字在 --bg-sunken 上无法达到 4.5:1 */
   --text: hsl(var(--base-h) var(--base-s) calc(var(--base-l) - 88%));
-  --text-subtle: hsl(var(--base-h) var(--base-s) calc(var(--base-l) - 55%));
-  --text-muted: hsl(var(--base-h) var(--base-s) calc(var(--base-l) - 48%));
+  --text-secondary: hsl(var(--base-h) var(--base-s) calc(var(--base-l) - 58%));
 
-  --border: hsl(var(--base-h) var(--base-s) calc(var(--base-l) - 10%));
-  --border-strong: hsl(var(--base-h) var(--base-s) calc(var(--base-l) - 16%));
-
-  /* 主强调色：深青。避开五种状态色(灰/钢蓝/鼠灰绿/橙/紫)与任务chip(琥珀)，
-     避免"强调色与被选状态色混淆"，并与暖纸中性色形成冷暖张力。 */
+  /* ---- 语义色：只有两个（§2.2）---- */
+  --c-done: #4f7a33;
+  --on-done: #ffffff;
   --accent: #0e7490;
-  --accent-ink: #155e75;
-  --accent-focus: hsla(190, 78%, 27%, 0.16);
+  --accent-focus: hsla(193, 82%, 31%, 0.16);
 
-  /* 状态色（light 下 Minimal 语义色，略降饱和更易读） */
-  --c-todo: var(--text-muted);
-  --c-doing: #5c8fb3;
-  --c-doing-tint: #b7cfdf; /* 进行中盒子的"半填充"浅色调 */
-  --c-done: #6a8f4c;
-  --c-deferred: #cf7438;
-  --c-scheduled: #9177bd;
+  /* ---- 字号层级（§3）---- */
+  --fs-title: 17px;
+  --fs-body: 15px;
+  --fs-label: 12px;
+  --fs-meta: 11px;
 
-  --radius-row: 14px;
+  /* ---- 圆角与阴影：阴影只有一个，且只用于浮层（§2.4）---- */
+  --radius-row: 8px;
+  --radius-control: 8px;
   --radius-pop: 12px;
-  --shadow-1: 0 1px 2px rgba(40, 34, 20, 0.04);
-  --shadow-2: 0 10px 28px -12px rgba(40, 34, 20, 0.18);
-  --shadow-menu: 0 12px 32px -12px rgba(40, 34, 20, 0.22);
+  --shadow-pop: 0 8px 24px -10px rgba(31, 28, 23, 0.18);
 
-  --checkbox-size: calc(16px * 0.9);
-  --checkbox-radius: 50%;
+  /* ---- 动效：上限 150ms，禁止位移与 stagger（§2.4）---- */
+  --dur-fast: 120ms;
+  --dur-base: 150ms;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 
-  --chip-task-bg: #fdf0d3;
-  --chip-task-fg: #a05a12;
-  --chip-date-bg: #efe9fa;
-  --chip-date-fg: #6b4fb0;
+  --checkbox-size: 18px;
 
   --font-stack: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Ubuntu,
     'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  --ease: cubic-bezier(0.22, 0.61, 0.36, 1); /* ease-out-quint */
-  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1); /* ease-out-expo，微交互专用 */
 }
 
 * {
@@ -71,22 +74,16 @@ body {
   margin: 0;
   font-family: var(--font-stack);
   background: var(--bg-page);
-  background-image: radial-gradient(
-    1200px 520px at 20% -10%,
-    hsla(var(--base-h), var(--base-s), calc(var(--base-l) - 4%), 0.7),
-    transparent 60%
-  );
-  background-attachment: fixed;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  line-height: 1.55;
+  line-height: 1.5;
 }
 
 .app {
   max-width: 640px;
   margin: 0 auto;
-  padding: 56px 22px 64px;
+  padding: 48px 20px 56px;
 }
 
 /* ---------- 品牌头部 ---------- */
@@ -94,23 +91,24 @@ header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 22px;
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 h1 {
-  font-size: 19px;
-  font-weight: 700;
+  font-size: var(--fs-title);
+  font-weight: 600;
   letter-spacing: -0.02em;
   margin: 0;
 }
 
-/* logo：三格堆叠的"盒子"标志 */
+/* logo：三格堆叠的"盒子"标志（属于品牌标记，用 --accent 合法） */
 .logo {
   display: grid;
   grid-template-columns: repeat(2, 8px);
@@ -136,21 +134,22 @@ h1 {
   grid-area: 2 / 2;
 }
 
-/* 日期选择 */
+/* ---------- 日期选择 ---------- */
 .date-picker {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
+/* 「今日」标记用中性色：绿色已被"完成"占用（§2.2 禁止语义色跨义复用） */
 .today-badge {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--fs-meta);
+  font-weight: 500;
   letter-spacing: 0.02em;
-  color: var(--c-done);
-  background: hsla(90, 25%, 45%, 0.12);
-  padding: 3px 9px;
-  border-radius: 999px;
+  color: var(--text-secondary);
+  background: var(--bg-sunken);
+  padding: 4px 8px;
+  border-radius: var(--radius-control);
   white-space: nowrap;
 }
 
@@ -161,35 +160,31 @@ h1 {
   appearance: none;
   -webkit-appearance: none;
   font: inherit;
-  font-size: 13.5px;
+  font-size: var(--fs-label);
   font-weight: 500;
   color: var(--text);
-  padding: 8px 30px 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-card);
-  box-shadow: var(--shadow-1);
+  padding: 8px 32px 8px 12px;
+  /* 控件边界须 ≥3:1（WCAG 1.4.11），故用 --border-control 而非 --divider */
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-control);
+  background: var(--bg-surface);
   cursor: pointer;
-  transition: border-color 0.16s var(--ease), box-shadow 0.16s var(--ease);
+  transition: border-color var(--dur-fast) var(--ease);
 }
 .select-wrap::after {
   content: '';
   position: absolute;
-  right: 11px;
+  right: 12px;
   top: 50%;
   width: 7px;
   height: 7px;
-  border-right: 1.7px solid var(--text-muted);
-  border-bottom: 1.7px solid var(--text-muted);
+  border-right: 1.7px solid var(--text-secondary);
+  border-bottom: 1.7px solid var(--text-secondary);
   transform: translateY(-70%) rotate(45deg);
   pointer-events: none;
 }
-.select-wrap select:not(:disabled):hover {
-  border-color: var(--border-strong);
-}
 .select-wrap select:focus-visible {
   outline: none;
-  border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-focus);
 }
 
@@ -198,29 +193,30 @@ h1 {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 .day-status-label {
   flex: none;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-subtle);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  color: var(--text-secondary);
   letter-spacing: 0.01em;
   font-variant-numeric: tabular-nums;
 }
 .bar {
   flex: 1;
-  height: 5px;
+  height: 4px;
   border-radius: 999px;
-  background: var(--bg-subtle);
+  background: var(--bg-sunken);
   overflow: hidden;
 }
+/* 进度表达"完成度"，与 --c-done 同义，属强化而非跨义复用 */
 .bar-fill {
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: var(--accent);
-  transition: width 0.5s var(--ease);
+  background: var(--c-done);
+  transition: width var(--dur-base) var(--ease);
 }
 
 /* ---------- 列表 ---------- */
@@ -230,40 +226,43 @@ h1 {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
 }
 
+/* 行不是卡片：无边框、无阴影、无背景（§4.1） */
 .todo {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 13px 14px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  min-height: 40px;
+  padding: 10px 12px;
   border-radius: var(--radius-row);
-  box-shadow: var(--shadow-1);
-  animation: row-in 0.4s var(--ease) both;
-  animation-delay: calc(var(--i, 0) * 30ms);
-  transition: transform 0.18s var(--ease), box-shadow 0.18s var(--ease),
-    border-color 0.18s var(--ease), background 0.18s var(--ease);
+  transition: background var(--dur-fast) var(--ease);
 }
 
-@keyframes row-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px) scale(0.995);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+/* 缩进分隔线：left 对齐文字起点（12 padding + 18 box + 12 gap = 42） */
+.todo + .todo::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 42px;
+  right: 0;
+  height: 1px;
+  background: var(--divider);
+  transition: opacity var(--dur-fast) var(--ease);
 }
 
 .todo:hover {
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-2);
-  transform: translateY(-1px);
+  background: var(--bg-hover);
 }
+
+/* 悬停行及其相邻行的分隔线隐藏，避免与悬停底色打架 */
+.todo:hover::before,
+.todo:hover + .todo::before {
+  opacity: 0;
+}
+
 .todo[draggable='true'] {
   cursor: grab;
 }
@@ -274,53 +273,40 @@ h1 {
 .todo .text {
   flex: 1;
   min-width: 0;
-  font-size: 14.5px;
+  font-size: var(--fs-body);
 }
 
-/* 完成项：去色、弱化，但保留可读（无删除线） */
+/* 完成项：降一级文本层级（用字色而非删除线，沿用 Minimal 方法） */
 .todo-done .text {
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
-/* ---------- 状态盒 ---------- */
+/* ---------- 状态框 ---------- */
+/* 五个状态只有"完成"有颜色，其余四态共用中性灰，靠符号区分（§4.2） */
 .box {
   flex: none;
   width: var(--checkbox-size);
   height: var(--checkbox-size);
-  min-width: 18px;
-  min-height: 18px;
-  border: 1.5px solid var(--text-muted);
-  border-radius: var(--checkbox-radius);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
-  font-weight: 600;
+  padding: 0;
+  border: 1.5px solid var(--text-secondary);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--fs-label);
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-  color: var(--text-subtle);
-  background: var(--bg-card);
   cursor: pointer;
-  padding: 0;
-  transition: transform 0.15s var(--ease-expo), background 0.15s var(--ease),
-    border-color 0.15s var(--ease);
+  transition: transform var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
 }
 .box:not(:disabled):hover {
-  background: var(--bg-hover);
+  background: var(--bg-sunken);
   transform: scale(1.08);
-}
-/* 填充类状态不受悬停底色覆盖（保持"填充度"语义不变） */
-.box-doing:not(:disabled):hover {
-  background: linear-gradient(
-    to bottom,
-    var(--bg-card) 0%,
-    var(--bg-card) 50%,
-    var(--c-doing-tint) 50%,
-    var(--c-doing-tint) 100%
-  );
-}
-.box-done:not(:disabled):hover {
-  background: var(--c-done);
 }
 .box:not(:disabled):active {
   transform: scale(0.92);
@@ -334,65 +320,45 @@ h1 {
   cursor: not-allowed;
 }
 
-/* 切换状态时的"落子"动效：符号重挂载播放 */
+/* 切换状态时的"落子"反馈：仅 scale + opacity，≤150ms */
 .box-sym {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
-  animation: box-pop 0.26s var(--ease) both;
+  animation: box-pop var(--dur-fast) var(--ease) both;
 }
 @keyframes box-pop {
-  0% {
-    transform: scale(0.2);
+  from {
+    transform: scale(0.6);
     opacity: 0;
   }
-  60% {
-    transform: scale(1.16);
-    opacity: 1;
-  }
-  100% {
+  to {
     transform: scale(1);
+    opacity: 1;
   }
 }
 
+/* 唯一有色的状态 */
 .box-done {
   border-color: var(--c-done);
   background: var(--c-done);
-  color: #fff;
+  color: var(--on-done);
 }
-/* 完成勾：无衬线。用 CSS 边框绘制，避免字形在部分平台渲染成衬线体 */
+.box-done:not(:disabled):hover {
+  background: var(--c-done);
+}
+/* 完成勾用 CSS 边框绘制，避免字形在部分平台渲染成衬线体 */
 .box-done .box-sym {
-  display: inline-flex;
-  align-items: center;
   font-size: 0;
 }
 .box-done .box-sym::before {
   content: '';
-  width: 7px;
+  width: 8px;
   height: 4px;
   border-left: 2px solid currentColor;
   border-bottom: 2px solid currentColor;
   transform: rotate(-45deg) translate(-1px, -1px);
-}
-.box-doing {
-  border-color: var(--c-doing);
-  color: var(--c-doing);
-  background: linear-gradient(
-    to bottom,
-    var(--bg-card) 0%,
-    var(--bg-card) 50%,
-    var(--c-doing-tint) 50%,
-    var(--c-doing-tint) 100%
-  );
-}
-.box-deferred {
-  border-color: var(--c-deferred);
-  color: var(--c-deferred);
-}
-.box-scheduled {
-  border-color: var(--c-scheduled);
-  color: var(--c-scheduled);
 }
 
 /* ---------- 迁移菜单 ---------- */
@@ -405,172 +371,147 @@ h1 {
 .menu-trigger {
   border: none;
   background: none;
-  color: var(--text-muted);
-  font-size: 17px;
+  color: var(--text-secondary);
+  font-size: var(--fs-body);
   line-height: 1;
   cursor: pointer;
-  padding: 3px 7px;
-  border-radius: 7px;
+  padding: 4px 8px;
+  border-radius: var(--radius-control);
   opacity: 0;
-  transition: opacity 0.15s var(--ease), background 0.15s var(--ease),
-    color 0.15s var(--ease);
+  transition: opacity var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);
 }
 .todo:hover .menu-trigger,
 .menu-trigger:focus-visible {
   opacity: 1;
 }
 .menu-trigger:hover {
-  background: var(--bg-subtle);
-  color: var(--text-subtle);
+  background: var(--bg-sunken);
 }
 .menu-trigger:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--accent-focus);
 }
+
 .menu {
   position: absolute;
   right: 0;
-  top: calc(100% + 6px);
+  top: calc(100% + 4px);
   z-index: 20;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-control);
   border-radius: var(--radius-pop);
-  box-shadow: var(--shadow-menu);
-  padding: 5px;
+  box-shadow: var(--shadow-pop);
+  padding: 4px;
   min-width: 148px;
   display: flex;
   flex-direction: column;
-  animation: pop-in 0.16s var(--ease) both;
+  animation: pop-in 140ms var(--ease) both;
 }
 @keyframes pop-in {
   from {
     opacity: 0;
-    transform: translateY(-4px) scale(0.97);
+    transform: scale(0.97);
   }
   to {
     opacity: 1;
-    transform: none;
+    transform: scale(1);
   }
 }
 .menu button {
   border: none;
   background: none;
   text-align: left;
-  padding: 9px 11px;
+  padding: 8px 10px;
   font: inherit;
-  font-size: 13px;
-  border-radius: 8px;
+  font-size: var(--fs-label);
+  font-weight: 500;
+  border-radius: var(--radius-control);
   cursor: pointer;
   color: var(--text);
-  transition: background 0.12s var(--ease);
+  transition: background var(--dur-fast) var(--ease);
 }
 .menu button:hover {
   background: var(--bg-hover);
 }
 .menu-date {
-  margin-top: 3px;
+  margin-top: 4px;
   font: inherit;
-  font-size: 13px;
-  padding: 6px 9px;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  font-size: var(--fs-label);
+  padding: 8px 10px;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-control);
   width: 100%;
-  box-sizing: border-box;
-  background: var(--bg-card);
-  color: inherit;
+  background: var(--bg-surface);
+  color: var(--text);
 }
 
 /* ---------- 完成/开始日期注记 ---------- */
 .done-note {
-  color: var(--text-muted);
-  margin-left: 6px;
-  font-size: 12.5px;
+  color: var(--text-secondary);
+  margin-left: 4px;
+  font-size: var(--fs-meta);
   white-space: nowrap;
 }
 
-/* ---------- chip ---------- */
+/* ---------- 元数据（任务、日期） ---------- */
+/* 只做右对齐的 11px 灰字，不再使用彩色底胶囊（§5.1）。
+   App 仍会挂 chip-task / chip-date 类名，但二者不再有独立配色。 */
 .chip {
   flex: none;
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  padding: 2px 9px;
-  border-radius: 999px;
-  background: var(--bg-subtle);
-  color: var(--text-subtle);
+  font-size: var(--fs-meta);
+  font-weight: 400;
+  color: var(--text-secondary);
   white-space: nowrap;
-}
-.chip-task {
-  background: var(--chip-task-bg);
-  color: var(--chip-task-fg);
-}
-.chip-date {
-  background: var(--chip-date-bg);
-  color: var(--chip-date-fg);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- 通用 ---------- */
 .muted {
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 .empty {
   text-align: center;
-  padding: 36px 16px;
-  line-height: 1.9;
-  font-size: 13.5px;
+  padding: 32px 16px;
+  line-height: 1.6;
+  font-size: var(--fs-body);
 }
 .empty code {
-  font-size: 12.5px;
+  font-size: var(--fs-label);
 }
 main > .muted {
   padding: 24px 0;
-  font-size: 13.5px;
+  font-size: var(--fs-body);
 }
 
 code {
-  background: var(--bg-code);
-  padding: 1.5px 6px;
-  border-radius: 6px;
-  font-size: 12.5px;
+  background: var(--bg-sunken);
+  padding: 2px 6px;
+  border-radius: var(--radius-control);
+  font-size: var(--fs-label);
 }
 
 footer {
-  margin-top: 34px;
-  font-size: 12px;
+  margin-top: 32px;
+  font-size: var(--fs-meta);
   text-align: center;
-  opacity: 0.75;
 }
 
 /* ---------- 响应式 ---------- */
 @media (max-width: 520px) {
   .app {
-    padding: 36px 16px 56px;
-  }
-  header {
-    gap: 10px;
-  }
-  .brand {
-    gap: 9px;
-  }
-  h1 {
-    font-size: 17px;
+    padding: 48px 16px 56px;
   }
   .today-badge {
     display: none; /* 窄屏省位：当前选中日期即"今日"自明 */
   }
-  .todo {
-    padding: 11px 12px;
-  }
   .done-note {
     white-space: normal; /* 长日期注记允许换行，避免溢出 */
-  }
-  .todo .text {
-    font-size: 14px;
   }
 }
 
 /* ---------- 动效可访问性 ---------- */
-/* 尊重系统"减弱动态"偏好：禁用位移/跳变，仅保留必要的状态反馈(进度、聚焦)。 */
+/* 尊重系统"减弱动态"偏好：禁用位移与跳变，仅保留必要的状态反馈。 */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
