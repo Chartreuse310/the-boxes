@@ -4,6 +4,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
 import path from 'node:path'
 import {
+  addTodo,
   ensureIdsInFile,
   migrateTodo,
   reorderInFile,
@@ -172,6 +173,19 @@ function boxesApi(dataDir: string): Plugin {
           readFile(path.join(dataDir, 'inbox', `${m[1]}.md`), 'utf8')
             .then((content) => send(200, { date: m[1], content }))
             .catch(() => send(404, { error: 'not found' }))
+          return
+        }
+
+        // POST /api/days/:date/todos : 添加一条 todo（界面输入框回车，SPEC §4 行内语法）
+        // 落该日文件末尾；文件不存在则创建；正文里 @日期 / +任务 归入规范 token。
+        const ma = pathname.match(/^\/days\/(\d{4}-\d{2}-\d{2})\/todos$/)
+        if (req.method === 'POST' && ma) {
+          handle(async () => {
+            const body = await readBody()
+            const text = String(body.text ?? '')
+            const { id } = await addTodo(dataDir, ma[1], text)
+            return { ok: true, id }
+          })
           return
         }
 

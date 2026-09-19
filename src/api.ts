@@ -56,6 +56,11 @@ export interface BoxesApi {
   getDay(date: string): Promise<RawDay | null>
   /** 确保某日文件存在（无则创建空文件）并补齐缺失 id；返回最新原文 */
   ensureIds(date: string): Promise<string>
+  /**
+   * 添加一条 todo 到某日 inbox（界面输入框回车）。text 可含行内 `@日期` / `+任务`
+   * （SPEC §4），由服务端归入规范 token 并生成 id。返回新行 id。
+   */
+  addTodo(date: string, text: string): Promise<string>
   /** 修改某 todo 状态（三态：todo / doing / done） */
   setState(date: string, id: string, state: string): Promise<void>
   /** 迁移（SPEC v2.0）：把该行原样移动到目标日文件，源文件删行 */
@@ -96,6 +101,15 @@ const httpApi: BoxesApi = {
     const r = await fetch(`/api/days/${date}/ensure-ids`, { method: 'PUT' })
     if (!r.ok) throw new Error(`ensureIds 失败：${r.status} ${await r.text()}`)
     return (await r.json()).content
+  },
+  addTodo: async (date, text) => {
+    const r = await fetch(`/api/days/${date}/todos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    })
+    if (!r.ok) throw new Error(`addTodo 失败：${r.status} ${await r.text()}`)
+    return (await r.json()).id
   },
   setState: async (date, id, state) => {
     const r = await fetch(`/api/days/${date}/todos/${id}/state`, {

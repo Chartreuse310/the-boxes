@@ -318,6 +318,8 @@ export default function App() {
   const drag = useRef<{ index: number; id: string; source: SourcedTodo['source'] } | null>(null)
   // 运行环境信息（数据目录 / 版本）：只用于 footer。取不到就不显示那一段，不阻塞界面。
   const [info, setInfo] = useState<BoxesInfo | null>(null)
+  // 添加框草稿（all / day 视图输入，回车提交后清空）
+  const [draft, setDraft] = useState('')
 
   const loadDay = async (date: string) => {
     const day = await api.getDay(date)
@@ -422,6 +424,26 @@ export default function App() {
     const newOrder = copy.map((t) => t.id).filter(Boolean) as string[]
     if (view.kind === 'day') await api.reorder(view.date, newOrder)
     else await api.taskReorder(view.month, view.slug, newOrder)
+  }
+
+  // 添加框回车（仅 all / day 视图）：落「正在看的那天」，平铺时落今天。
+  // 成功后清空草稿、刷新日历圆点与当前视图；失败回填草稿，不吞掉用户输入。
+  const submitDraft = async () => {
+    const text = draft.trim()
+    if (!text) return
+    const target = view?.kind === 'day' ? view.date : today()
+    setDraft('')
+    try {
+      await api.addTodo(target, text)
+    } catch {
+      setDraft(text)
+      return
+    }
+    api.listDays().then(setDays).catch(() => {})
+    // 平铺按日期倒序，新行落今日组（文件不存在时今日会新进列表）——
+    // 与筛选视图都走一次重读，让磁盘上的新行进入界面。
+    if (view === null) setView({ kind: 'all' })
+    else refreshView()
   }
 
   // footer 说明：数据目录 + 版本，不带标签。两者都来自 /api/info，
@@ -566,6 +588,31 @@ export default function App() {
         </aside>
 
         <main>
+        {/* 添加框（默认平铺 / 某日视图）：回车落今天 / 正在看的那天。
+            任务视图不显示——界面内建任务 / 向任务加 todo 属 M2。 */}
+        {(view?.kind === 'all' || view?.kind === 'day') && (
+          <form
+            className="add-bar"
+            onSubmit={(e) => {
+              e.preventDefault()
+              submitDraft()
+            }}
+          >
+            <input
+              className="add-input"
+              type="text"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder={
+                view?.kind === 'day'
+                  ? `添加到 ${view.date}…`
+                  : '添加 todo…（可用 @日期 +任务，回车）'
+              }
+              aria-label="添加 todo"
+              autoComplete="off"
+            />
+          </form>
+        )}
         {/* 任务详情头：名称 + 目标 + 状态行（v0.3.11 起为主区第一个元素） */}
         {view?.kind === 'task' && taskMeta && (
           <div className="task-header">
@@ -593,14 +640,13 @@ export default function App() {
             <p className="muted empty">
               这一天还没有 todo。
               <br />
-              在 <code>{inboxFile}</code> 里加一行，保存后刷新即可看到。
+              在上方输入框回车即可添加（也可在 <code>{inboxFile}</code> 里直接写）。
             </p>
           ) : (
             <p className="muted empty">
               还没有任何 todo。
               <br />
-              在 <code>{dataRoot}/inbox/日期.md</code> 或 <code>{dataRoot}/tasks/月份/任务.md</code>{' '}
-              里加一行，保存后刷新即可看到。
+              在上方输入框回车即可添加（也可在 <code>{dataRoot}/inbox/日期.md</code> 里直接写）。
             </p>
           )
         ) : view?.kind === 'all' ? (

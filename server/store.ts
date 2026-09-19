@@ -17,6 +17,9 @@ const STATE_CHAR: Record<TodoState, string> = {
 const LINE_RE = /^(-\s\[)([ x/])(\].*?)(\s\^[a-z0-9]+)?$/i
 // 从整行里取 id（` ^xxxx`：前面有空白；id 为字母数字，遇空白/行尾停止）
 const ID_RE = /(\s|^)\^([a-z0-9]+)/i
+// 添加时从用户原话里摘出的可选行内 token（SPEC §4）：意向日期与归属任务
+const ADD_DATE_RE = /\s@(\d{4}-\d{2}-\d{2})\b/
+const ADD_TASK_RE = /\s\+([^\s+@^]+)/
 
 function inboxPath(dataDir: string, date: string): string {
   return path.join(dataDir, 'inbox', `${date}.md`)
@@ -233,4 +236,72 @@ export async function ensureInboxDir(dataDir: string): Promise<void> {
 export async function touchDay(dataDir: string, date: string): Promise<void> {
   await ensureInboxDir(dataDir)
   await writeFile(inboxPath(dataDir, date), `# ${date}\n\n`)
+}
+
+/**
+ * 添加一条 todo（界面输入框回车，落某日 inbox 文件）。
+ * `text` 为用户原话，可含行内语法（SPEC §4）：`@YYYY-MM-DD`（意向日期）、`+任务`（归属）。
+ * 其余 token（@start/@done/^id）对新建无意义，一律丢弃。
+ * 行按 SPEC §4 规范顺序拼为 `- [ ] 正文 [+任务] [@日期] ^id`，追加到该日文件末尾；
+ * 文件不存在则创建（含标题）。id 随机 4 位、避让文件内已有 id。返回新行 id。
+ */
+export async function addTodo(
+  dataDir: string,
+  date: string,
+  text: string,
+): Promise<{ id: string }> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`非法日期：${date}`)
+  let body = text.trim()
+  if (!body) throw new Error('todo 内容为空')
+
+  // 摘出可保留的行内 token（先任务后日期，正文里抹掉它们）
+  let dateTok: string | null = null
+  let taskTok: string | null = null
+  const dm = body.match(ADD_DATE_RE)
+  if (dm) {
+    dateTok = dm[1]
+    body = body.replace(dm[0], ' ')
+  }
+  const tm = body.match(ADD_TASK_RE)
+  if (tm) {
+    taskTok = tm[1]
+    body = body.replace(tm[0], ' ')
+  }
+  // 丢弃用户可能误粘的 @start/@done/^id；压缩多余空白
+  body = body
+    .replace(/\s@start:\d{4}-\d{2}-\d{2}\b/g, '')
+    .replace(/\s@done:\d{4}-\d{2}-\d{2}\b/g, '')
+    .replace(/\s\^[a-z0-9]+\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!body) throw new Error('todo 内容为空')
+
+  // 文件：不存在则创建（含标题），并收集已有 id 以避让
+  const file = inboxPath(dataDir, date)
+  let content: string
+  try {
+    content = await readFile(file, 'utf8')
+  } catch {
+    await touchDay(dataDir, date)
+    content = await readFile(file, 'utf8')
+  }
+  const existing = new Set<string>()
+  for (const raw of content.split('\n')) {
+    const m = raw.match(ID_RE)
+    if (m) existing.add(m[2])
+  }
+  let id: string
+  do {
+    id = randomId()
+  } while (existing.has(id))
+
+  // 规范顺序：正文 +任务 @日期 ^id
+  let line = `- [ ] ${body}`
+  if (taskTok) line += ` +${taskTok}`
+  if (dateTok) line += ` @${dateTok}`
+  line += ` ^${id}`
+
+  const base = content === '' || content.endsWith('\n') ? content : content + '\n'
+  await writeFile(file, `${base}${line}\n`)
+  return { id }
 }
