@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import { api, type BoxesInfo, type SourcedTodo, type TaskSummary, type TodoSource } from './api'
+import { api, type BoxesInfo, type SourcedTodo, type TaskSummary, type TodoSource, type TrashItem } from './api'
 import { parseInbox, parseTask, type TaskMeta, type TodoState } from './lib/parser'
 
 /**
@@ -11,6 +11,7 @@ type View =
   | { kind: 'all' }
   | { kind: 'day'; date: string }
   | { kind: 'task'; month: string; slug: string }
+  | { kind: 'trash' }
 
 /** 本地时区的今日日期（YYYY-MM-DD） */
 function today(): string {
@@ -455,6 +456,10 @@ export default function App() {
   const [trashOver, setTrashOver] = useState(false)
   // 上手示例是否仍在（决定顶部「清空示例」横幅显隐）。启动播种在服务器侧完成，这里只查状态。
   const [demoActive, setDemoActive] = useState(false)
+  // 垃圾箱内容（决定头部垃圾桶入口是否出现 + 计数）；trash 视图列出它。
+  const [trash, setTrash] = useState<TrashItem[]>([])
+
+  const loadTrash = () => api.getTrash().then(setTrash).catch(() => setTrash([]))
 
   const loadDay = async (date: string) => {
     const day = await api.getDay(date)
@@ -485,7 +490,8 @@ export default function App() {
     if (view === null) return
     if (view.kind === 'all') loadAll()
     else if (view.kind === 'day') loadDay(view.date)
-    else loadTask(view.month, view.slug)
+    else if (view.kind === 'task') loadTask(view.month, view.slug)
+    else loadTrash()
   }
 
   // 环境信息：与日期列表无关，只需一次
@@ -493,18 +499,23 @@ export default function App() {
     api.info().then(setInfo).catch(() => setInfo(null))
   }, [])
 
-  // 启动：默认平铺所有 todo；日期与任务列表供日历圆点 / 卡片使用
+  // 启动：默认平铺所有 todo；日期与任务列表供日历圆点 / 卡片使用，trash 供垃圾箱入口计数
   useEffect(() => {
     setView({ kind: 'all' })
     api.listDays().then(setDays).catch(() => setDays([]))
     api.listTasks().then(setTasks).catch(() => setTasks([]))
+    loadTrash()
   }, [])
 
-  // 切换视图：读取文件并按 SPEC §4/§5 解析
+  // 切换视图：读取文件并按 SPEC §4/§5 解析（trash 视图单独走 loadTrash）
   useEffect(() => {
     if (view === null) {
       setTodos([])
       setTaskMeta(null)
+      return
+    }
+    if (view.kind === 'trash') {
+      loadTrash()
       return
     }
     setTodos(null)
@@ -522,6 +533,7 @@ export default function App() {
       api.subscribe(() => {
         api.listDays().then(setDays).catch(() => {})
         api.listTasks().then(setTasks).catch(() => {})
+        loadTrash()
         if (!liveRef.current.editing) liveRef.current.refreshView()
       }),
     [],
@@ -608,7 +620,19 @@ export default function App() {
     }
     api.listDays().then(setDays).catch(() => {})
     api.listTasks().then(setTasks).catch(() => {})
+    loadTrash()
     refreshView()
+  }
+
+  // 清空垃圾箱：彻底删除 trash/（不可恢复），刷新计数并回平铺
+  const emptyAllTrash = async () => {
+    try {
+      await api.emptyTrash()
+    } catch {
+      return
+    }
+    loadTrash()
+    setView({ kind: 'all' })
   }
 
   // 拖动重排：只在同一来源文件内落子——单文件视图=整列表，平铺视图=该组内；跨来源的落点忽略
@@ -837,20 +861,35 @@ export default function App() {
           </span>
           <h1>the-boxes</h1>
         </div>
-        {/* home：回到平铺（默认视图）。取代原主区文字按钮「接下来干啥？」——
-            平铺不需要自报家门，返回入口收到页面右上角 */}
-        <button
-          type="button"
-          className="home-btn"
-          onClick={() => {
-            if (view?.kind !== 'all') setView({ kind: 'all' })
-          }}
-          aria-label="回到平铺"
-          title="回到平铺"
-          aria-current={view?.kind === 'all' ? 'true' : undefined}
-        >
-          <HomeIcon />
-        </button>
+        {/* 右上角操作区：垃圾箱入口（有内容才出现）+ home 回平铺 */}
+        <div className="head-actions">
+          {trash.length > 0 && (
+            <button
+              type="button"
+              className="home-btn trash-entry"
+              onClick={() => setView(view?.kind === 'trash' ? { kind: 'all' } : { kind: 'trash' })}
+              aria-label={`垃圾箱，${trash.length} 项`}
+              title={`垃圾箱（${trash.length} 项）`}
+              aria-current={view?.kind === 'trash' ? 'true' : undefined}
+            >
+              <TrashIcon />
+            </button>
+          )}
+          {/* home：回到平铺（默认视图）。取代原主区文字按钮「接下来干啥？」——
+              平铺不需要自报家门，返回入口收到页面右上角 */}
+          <button
+            type="button"
+            className="home-btn"
+            onClick={() => {
+              if (view?.kind !== 'all') setView({ kind: 'all' })
+            }}
+            aria-label="回到平铺"
+            title="回到平铺"
+            aria-current={view?.kind === 'all' ? 'true' : undefined}
+          >
+            <HomeIcon />
+          </button>
+        </div>
       </header>
 
       <div className="layout">
@@ -1006,7 +1045,37 @@ export default function App() {
             )}
           </div>
         )}
-        {todos === null ? (
+        {view?.kind === 'trash' ? (
+          <div className="trash-view">
+            <div className="view-head">
+              <h2 className="view-title">垃圾箱</h2>
+              {trash.length > 0 && (
+                <button type="button" className="btn" onClick={emptyAllTrash}>
+                  清空垃圾箱
+                </button>
+              )}
+            </div>
+            {trash.length === 0 ? (
+              <p className="muted empty">垃圾箱是空的。</p>
+            ) : (
+              <ul className="todos">
+                {trash.map((t, i) => (
+                  <li key={t.id ?? i} className={`todo todo-${t.state}`}>
+                    <span className={'box box-' + t.state} aria-hidden>
+                      <span className="box-sym">
+                        {t.state === 'done' ? <DoneCheck /> : t.state === 'doing' ? <DoingHalf /> : null}
+                      </span>
+                    </span>
+                    <span className="text">
+                      <span className="todo-title">{t.text}</span>
+                      <span className="done-note">——删除于 {t.date}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : todos === null ? (
           <p className="muted">加载中…</p>
         ) : todos.length === 0 ? (
           view?.kind === 'task' ? (

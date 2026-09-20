@@ -601,3 +601,45 @@ export async function getOnboarding(dataDir: string): Promise<{ present: boolean
   const files = marker?.files ?? []
   return { present: files.length > 0, files }
 }
+
+// —— 垃圾箱视图：读取 trash/ 里的软删除行、以及彻底清空 ——
+
+export interface TrashItem {
+  id: string | null
+  text: string
+  state: TodoState
+  startDate: string | null
+  doneDate: string | null
+  date: string // 删除日（= 所在 trash 文件名）
+}
+
+/** 列出 trash/ 里的所有软删除 todo，按删除日倒序。文件不存在或空 → []。 */
+export async function listTrash(dataDir: string): Promise<TrashItem[]> {
+  let files: string[] = []
+  try {
+    files = await readdir(path.join(dataDir, 'trash'))
+  } catch {
+    return []
+  }
+  const out: TrashItem[] = []
+  for (const f of files.filter((x) => DAY_RE.test(x.replace(/\.md$/, ''))).sort().reverse()) {
+    const date = f.replace(/\.md$/, '')
+    for (const t of parseInbox(await readFile(path.join(dataDir, 'trash', f), 'utf8'))) {
+      out.push({ id: t.id, text: t.text, state: t.state, startDate: t.startDate, doneDate: t.doneDate, date })
+    }
+  }
+  return out
+}
+
+/** 清空垃圾箱：删除 trash/ 下所有按日文件（不可再恢复）。 */
+export async function emptyTrash(dataDir: string): Promise<void> {
+  let files: string[] = []
+  try {
+    files = await readdir(path.join(dataDir, 'trash'))
+  } catch {
+    return
+  }
+  for (const f of files.filter((x) => DAY_RE.test(x.replace(/\.md$/, '')))) {
+    await unlink(path.join(dataDir, 'trash', f)).catch(() => {})
+  }
+}

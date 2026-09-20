@@ -31,6 +31,15 @@ export interface TaskSummary {
   created: string | null
 }
 
+/** 垃圾箱里的一条软删除 todo（GET /api/trash）；date = 删除日（所在 trash 文件名）。 */
+export interface TrashItem {
+  id: string | null
+  text: string
+  state: 'todo' | 'doing' | 'done'
+  startDate: string | null
+  doneDate: string | null
+  date: string
+}
 export interface RawTask {
   month: string
   slug: string
@@ -102,6 +111,10 @@ export interface BoxesApi {
   ): Promise<void>
   /** 软删除：把整行移进 trash/<今天>.md（拖进底部垃圾箱）。数据仍在文件里，可打开找回。 */
   trashTodo(source: TodoSource, id: string): Promise<void>
+  /** 垃圾箱视图：列出 trash/ 里的软删除行 */
+  getTrash(): Promise<TrashItem[]>
+  /** 清空垃圾箱：删除 trash/ 下所有按日文件（不可再恢复） */
+  emptyTrash(): Promise<void>
 }
 
 const httpApi: BoxesApi = {
@@ -235,6 +248,15 @@ const httpApi: BoxesApi = {
       body: JSON.stringify({ source, id }),
     })
     if (!r.ok) throw new Error(`trashTodo 失败：${r.status} ${await r.text()}`)
+  },
+  getTrash: async () => {
+    const r = await fetch('/api/trash')
+    if (!r.ok) throw new Error(`getTrash 失败：${r.status}`)
+    return r.json()
+  },
+  emptyTrash: async () => {
+    const r = await fetch('/api/trash/empty', { method: 'POST' })
+    if (!r.ok) throw new Error(`emptyTrash 失败：${r.status} ${await r.text()}`)
   },
 }
 

@@ -8,8 +8,10 @@ import {
   addTaskTodo,
   addTodo,
   clearOnboarding,
+  emptyTrash,
   ensureIdsInFile,
   getOnboarding,
+  listTrash,
   migrateTodo,
   reorderInFile,
   seedOnboardingIfEmpty,
@@ -221,6 +223,21 @@ function boxesApi(dataDir: string): Plugin {
         if (req.method === 'POST' && /^\/onboarding\/clear$/.test(pathname)) {
           handle(async () => {
             await clearOnboarding(dataDir)
+            return { ok: true }
+          })
+          return
+        }
+
+        // GET /api/trash : 列出 trash/ 里的软删除行（垃圾箱视图）
+        if (req.method === 'GET' && /^\/trash\/?$/.test(pathname)) {
+          handle(() => listTrash(dataDir))
+          return
+        }
+
+        // POST /api/trash/empty : 彻底清空垃圾箱（删 trash/ 下按日文件，不可再恢复）
+        if (req.method === 'POST' && /^\/trash\/empty$/.test(pathname)) {
+          handle(async () => {
+            await emptyTrash(dataDir)
             return { ok: true }
           })
           return
