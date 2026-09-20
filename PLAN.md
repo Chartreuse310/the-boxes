@@ -1,6 +1,6 @@
 # the-boxes · 开发与易用性测试计划
 
-> 版本 v0.2.27 · 2026-09-20 · 本文是活文档，每个里程碑结束时回顾更新，变更见文末【变更日志】
+> 版本 v0.2.28 · 2026-09-20 · 本文是活文档，每个里程碑结束时回顾更新，变更见文末【变更日志】
 
 ## 1. 产品定义
 
@@ -338,6 +338,8 @@ the-boxes/                # 开源代码仓库
 - `package.json` 中 `"version": "0.0.1"` 即当前项目版本号，规则以此章为准；`M1` 里程碑 = 未来 `v0.1.x` 线，尚未开启
 
 ## 变更日志
+
+- **2026-09-20** v0.2.28：改名框去编辑态外显、日期输入去外框（纯视觉，配合 style-guide v0.3.24）。修改建议：双击改名时输入框带 surface+border-control+focus 环，与原显示行不像同一物；日期条里开始/完成外框偏重。实施方案：`.todo-name-input` → `font/color:inherit` + 透明无框无环；`.edit-field input` 去 border/背景/圆角、focus 仅去 outline（`.date-strip` 容器与 `.btn` 不动）。数据格式无变化。
 
 - **2026-09-20** v0.2.27：编辑器拆成三入口（改名双击 / 日期点 checkbox / 换文件只拖）（配合 style-guide v0.3.23）。修改建议：整行大表单太重、点 checkbox 盲切三态会凭空造今天日期。实施方案：①删 `TodoEditor` 大表单 + 编辑器里的所在文件字段 + 只读状态块 + cycleState/nextState/STATE_CYCLE；②改名 = 双击 `.todo-title`→就地 `.todo-name-input`（沿用显示样式，Enter/失焦提交、Esc 取消、编辑期禁拖）；③点 checkbox = 展开行下 `.date-strip`（开始/完成 + `×` +「标为完成(今天)」，状态仍由日期派生、只读反映）；④换文件 = 拖到日历格或任务卡片（`moveTo`→`updateTodo` target，任意来源互通）；⑤全走即时写盘、无保存按钮。数据格式无变化；M1「状态切换 / 行内编辑」措辞同步。
 

@@ -1,6 +1,6 @@
 # the-boxes · 界面风格规则（Style Guide）
 
-> 版本 v0.3.23 · 2026-09-20 · **本文是界面视觉的唯一事实源。**
+> 版本 v0.3.24 · 2026-09-20 · **本文是界面视觉的唯一事实源。**
 > `src/styles.css` 必须服从本文；两者不一致时，以本文为准，并视为待修复缺陷。
 > 视觉改动流程：先改本文 → 再改 `styles.css` → 在文末变更日志追加一条。
 
@@ -324,10 +324,10 @@
 
 **改一行 todo 的三件事分三个入口，不再有"整行大表单"**：改**名称**用双击、改**起止时间/状态**用点 checkbox、改**所在文件**只用拖拽。编辑是瞬时态，不新增卡片外观（§4.1）。所有改动即时写盘（`updateTodo`），无"保存/取消"。
 
-- **改名 = 双击行文字**：该行的 `.todo-title` 就地换成一个**输入框 `.todo-name-input`**，**沿用显示行的字号字色**（`--fs-body`/`--text`，仅加 surface + border-control + focus 环以示"在编辑"）。`Enter` / 失焦提交、`Esc` 取消；空白提交忽略。编辑期该 `li` `draggable=false`，以免拖拽抢走选中。
-- **起止日期 = 点 checkbox**：checkbox 不再"盲切三态"（那会凭空造今天日期），改为**展开该行下方的日期条 `.date-strip`**（作为紧随的 `.todo-dates` 列表项，缩进到文字起点下方，`margin-left = 12 + --checkbox-size + 12`）：开始 / 完成 两个 `<input type=date>`（`.edit-field` + `× .edit-clear` 清除）+「标为完成（今天）`.btn`」快捷键。**状态仍由两个日期派生**（有完成→完成、有开始→进行中、皆空→待办）且**只读**——checkbox 上的盒图标即时反映；三态只有"完成"有色（§4.2）。再点 checkbox 收起。
+- **改名 = 双击行文字**：该行的 `.todo-title` 就地换成一个输入框 `.todo-name-input`，**完全沿用显示行的样式**（`font/color:inherit`、透明、无边框无焦点环——编辑态不外显，v0.3.24）。`Enter` / 失焦提交、`Esc` 取消；空白提交忽略。编辑期该 `li` `draggable=false`，以免拖拽抢走选中。
+- **起止日期 = 点 checkbox**：checkbox 不再"盲切三态"（那会凭空造今天日期），改为**展开该行下方的日期条 `.date-strip`**（作为紧随的 `.todo-dates` 列表项，缩进到文字起点下方，`margin-left = 12 + --checkbox-size + 12`）：开始 / 完成 两个 `<input type=date>`——**无外框**（透明无描边、像纯文字，`× .edit-clear` 清除）+「标为完成（今天）`.btn`」快捷键。**状态仍由两个日期派生**（有完成→完成、无完成有开始→进行中、皆空→待办）且**只读**——checkbox 上的盒图标即时反映；三态只有"完成"有色（§4.2）。再点 checkbox 收起。
 - **换文件 = 只能拖**（唯一入口，编辑器里**没有**所在文件字段）：把行拖到 mini 日历某格 → 移到那天；拖到左下任务卡片 → 移进该任务。任意来源互通（日↔任务、任务↔任务），落点走 `updateTodo` 的整行移动（id 保留、撞车换新）。落点视觉沿用 §5.3 的拖放高亮（日历格 `--accent`）；任务卡片的拖放高亮可后续补。
-- **控件配色**：改名框 / 日期条字段 / 「标为完成」按钮均走 token（`--bg-surface` + `--border-control` + `--radius-control`，`:focus` 环同 §5.2；`.btn` 次级、悬停 `--bg-hover`）。数据格式仍 SPEC §4/§5，`+任务`/`@日期` 不写。
+- **控件配色**：日期条容器 `.date-strip` 用 `--bg-surface` + `--border-control` + `--radius-control`；「标为完成」是 `.btn`（次级、悬停 `--bg-hover`）。改名框与日期输入**刻意无框无底**（继承文字样式，v0.3.24）。数据格式仍 SPEC §4/§5，`+任务`/`@日期` 不写。
 - **宽度坑（沿用 v0.3.21）**：若将来再把整行改成非 flex 布局，记得 `li.todo.todo-editing` 之类覆盖要用高特异度，别被更靠后的 `.todo{display:flex}` 盖掉致右侧留白。
 
 ### 5.8 上手示例横幅（v0.3.17 起）
@@ -384,6 +384,7 @@
 
 ## 变更日志
 
+- **2026-09-20 v0.3.24**：**改名框去编辑态外显、日期输入去外框（§5.7）。** 修改建议：双击改名时输入框带了 surface+border-control+focus 环，和原显示行判若两物；日期条里开始/完成的外框也显重。实施方案：`.todo-name-input` 改 `font/color:inherit` + 透明无框无环无内边距（编辑态与显示一致）；`.edit-field input` 去 `border`/`background`/`radius`、focus 仅 `outline:none`（透明无边框、像纯文字，仍保留 `× .edit-clear` 与 native 选日）。`.date-strip` 容器与 `.btn` 不动。`src/styles.css` 同步，文件头版本引用升至 v0.3.24。纯视觉，数据格式无变化。
 - **2026-09-20 v0.3.23**：**编辑器拆成三入口——双击改名 / 点 checkbox 开日期条 / 换文件只能拖（重写 §5.7）。** 修改建议：一个整行大表单太重、且点 checkbox 盲切三态会凭空造今天日期；用户要"双击只改名沿用原样式、日期靠点 checkbox 出选项、文件夹只能拖动改"。实施方案：①删 `TodoEditor` 大表单 + 所在文件字段 + 只读状态块；②改名 = 双击 `.todo-title`→就地 `.todo-name-input`（沿用 `--fs-body`/`--text`，Enter/失焦提交、Esc 取消，编辑期禁拖）；③点 checkbox = 切换该行下方 `.todo-dates`/`.date-strip`（开始/完成 `type=date` + `×` +「标为完成(今天)`.btn`」，状态仍由日期派生、盒图标只读反映，移除 cycleState/nextState/STATE_CYCLE）；④换文件 = 拖到日历格或任务卡片（`moveTo` 走 `updateTodo` target，任意来源互通；日历落点复用高亮，任务卡片拖放高亮留后续）；⑤所有改动即时 `updateTodo` 写盘、无保存按钮；删 `.edit`/`.edit-area`/`.edit-row`/`.edit-loc*`/`.edit-actions`/`.edit-status`/`.btn-primary`/`li.todo.todo-editing` 等死样式。`src/styles.css` 加 `.todo-name-input`/`.todo-dates`/`.date-strip`，文件头版本引用升至 v0.3.23。数据格式无变化。
 - **2026-09-20 v0.3.22**：**编辑器第二/三行右对齐、所在文件框改随内容宽（改 §5.7）。** 修改建议：开始/完成/状态与所在文件都靠左、所在文件框通栏过大。实施方案：`.edit-row` 加 `justify-content:flex-end`；`.edit-loc-field` 由"输入框 flex:1 通栏"改 `justify-content:flex-end` + `.edit-loc` `field-sizing:content`（`min 8ch / max 26ch`、不通栏）。描述文本框仍通栏。`src/styles.css` 同步，文件头版本引用升至 v0.3.22。纯界面，数据格式无变化。
 - **2026-09-20 v0.3.21**：**编辑器占满宽度修复 + 状态改只读（改 §5.7）。** 修改建议：①编辑行右侧一大块留白——根因 `.todo-editing` 单类被更靠后的 `.todo{display:flex}` 盖掉，编辑内容缩成内容宽；②状态按钮不必可交互（日期才是入口）。实施方案：①`.todo-editing`→`li.todo.todo-editing`（含 `::before`/`:hover`）抬特异度强制 `display:block`、无 hover 底色、去缩进分隔线，编辑器随之占满；②`.status-btn`→静态 `.edit-status`（盒图标+中文名，随起止时间派生、不可点），删 cycleStatus。`src/styles.css` 同步，文件头版本引用升至 v0.3.21。纯界面，数据格式无变化。

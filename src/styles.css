@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.23（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.24（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -545,22 +545,19 @@ h1 {
 }
 
 /* ---------- 行内编辑：改名（双击文字）+ 日期条（点 checkbox 展开）---------- */
-/* 改名是就地输入，沿用显示行的字号字色（surface + border-control + focus 环，§5.6 控件规范）。 */
+/* 改名框**完全沿用显示行的样式**（继承 .text 的字号与颜色、透明无框无环），编辑态不外显。 */
 .todo-name-input {
   flex: 1;
   min-width: 0;
   font: inherit;
-  font-size: var(--fs-body);
-  color: var(--text);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-control);
-  border-radius: var(--radius-control);
-  padding: 2px 8px;
+  color: inherit;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
 }
-.todo-name-input:focus-visible {
+.todo-name-input:focus {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-focus);
 }
 /* 日期条：所属行的下一行 li（缩进到文字起点下方），surface 细框，含 开始/完成 + 快捷完成 */
 .todo-dates {
@@ -577,7 +574,7 @@ h1 {
   border: 1px solid var(--border-control);
   border-radius: var(--radius-control);
 }
-/* 日期条里的字段：标签（11px 次级）+ 控件（surface + border-control + focus 环）+ × 清除 */
+/* 日期条里的字段：标签 + **无外框**的日期输入（透明无描边、像纯文字）+ × 清除 */
 .edit-field {
   display: inline-flex;
   align-items: center;
@@ -592,16 +589,14 @@ h1 {
   font: inherit;
   font-size: var(--fs-label);
   color: var(--text);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-control);
-  border-radius: var(--radius-control);
-  padding: 5px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 2px 2px;
   min-width: 0;
 }
 .edit-field input:focus-visible {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-focus);
 }
 .edit-clear {
   border: none;
