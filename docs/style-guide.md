@@ -1,6 +1,6 @@
 # the-boxes · 界面风格规则（Style Guide）
 
-> 版本 v0.3.25 · 2026-09-20 · **本文是界面视觉的唯一事实源。**
+> 版本 v0.3.26 · 2026-09-20 · **本文是界面视觉的唯一事实源。**
 > `src/styles.css` 必须服从本文；两者不一致时，以本文为准，并视为待修复缺陷。
 > 视觉改动流程：先改本文 → 再改 `styles.css` → 在文末变更日志追加一条。
 
@@ -339,6 +339,15 @@
 - 文案 `.demo-note-text`：12px（`--fs-label`）、`--text-secondary`，其中「示例数据」用 `<strong>` 转 `--text` / 字重 600 强调；界面文案不含实现细节（§6）。
 - 按钮：复用 §5.7 `.btn`（次级、`--border-control` 描边、悬停 `--bg-hover`）——其描边落在本条的 `--bg-surface` 上，满足 §2.1「控件描边仅在 page/surface 达标」。
 
+### 5.9 垃圾箱落点（拖动 todo 时浮出的删除区，v0.3.26 起）
+
+**只在拖拽进行中出现**：底部居中浮出一个删除落点，把行拖进来 = 软删除进 `trash/`（不弹确认，松手即生效，可在文件里找回）。
+
+- 形态：`position:fixed` 底部居中（`transform:translateX(-50%)`，非悬停位移），横向 flex、图标 + 文案、gap 8px、内边距 10×18。`--bg-surface` + `1px solid var(--border-control)` + `--radius-pop` + `--shadow-pop`（浮层是 §6 阴影唯一例外）。`z-index` 高于内容。
+- 图标：矢量 `TrashIcon`（垃圾桶轮廓 + 盖 + 两道竖纹，18px / stroke 2 / viewBox 24 / `--text-secondary`）——§5.1 禁 emoji。
+- 文案：12px `--fs-label`、`--text-secondary`，「拖到此处删除 · 进垃圾箱」；界面文案不含实现细节。
+- 拖放高亮（`.is-over`）：`--accent-focus` 底 + `--accent` 描边 + 文字转 `--text`，与日历迁移落点同一套"可交互目标"语义（§5.3），不引入新色。
+
 ## 6. 禁止项
 
 - 页面或容器背景使用渐变、纹理、噪点、模糊、磨砂。
@@ -379,11 +388,13 @@
 - [ ] `@` 下拉是否按 §5.5 浮层规格（surface / border-control / radius-pop / shadow-pop）、高亮与悬停同底色、「创建任务 …」是否只用 `--accent` 文本不叠底色？目标徽章是否可点击清除？（§5.6）
 - [ ] 行内编辑三入口：改名=双击文字（就地 `.todo-name-input`，沿用显示字号字色）；起止日期=点 checkbox 展开 `.date-strip`（开始/完成 + 快捷完成，状态只读派生）；换文件=只能拖到日历格/任务卡片（编辑器内无所在文件字段）。「盲切三态」是否已移除、不再凭空造日期？（§5.7）
 - [ ] 上手示例横幅是否 surface 底 + `--divider` 描边（非 border-control）、按钮复用 `.btn`（描边落在 surface 达标）；示例不在时是否整条不渲染？（§5.8）
+- [ ] 垃圾箱落点是否仅在拖动中出现、固定底部居中浮层（surface/border-control/radius-pop/shadow-pop）、图标为矢量非 emoji、拖放高亮复用 `--accent`？（§5.9）
 - [ ] 进行中是否为"45° 分割、左上填满"的半填充圆？且 `.box` 保留 `overflow: hidden`、`.box-half` 尺寸 = `--checkbox-size`（改任一项都会在弧上露缝）？
 - [ ] `aria-label` 是否也过了上一条？（读屏用户同样会听到内部枚举名，但看不到界面，问题更难被发现）
 
 ## 变更日志
 
+- **2026-09-20 v0.3.26**：**新增 §5.9 垃圾箱落点（拖动时浮出的软删除区）。** 修改建议：需要删除 todo，但"数据即文件"下直接抹行太狠；改为拖动时底部浮出垃圾箱，松手 = 整行移进 `trash/`（可找回）。实施方案：§5.9——仅拖拽中出现、固定底部居中浮层（surface/border-control/radius-pop/shadow-pop，浮层是 §6 阴影唯一例外）、矢量 `TrashIcon`、拖放高亮复用 `--accent-focus`+`--accent`（同日历落点语义）；`transform:translateX(-50%)` 是居中非悬停位移。`src/styles.css` 落地 `.trash-drop`/`.trash-icon`，文件头版本引用升至 v0.3.26。
 - **2026-09-20 v0.3.25**：**修改名框双击后文字位移（§5.7）。** 现象：`.todo-name-input` 用 `flex:1` 当 flex 子项，基线/行高与块级 `.todo-title` 不一致，进入编辑时描述文字跳一下。修法：改名框改 `display:block` + `width:100%` + `line-height:inherit`（+ 已无框/无内边距），落点与 `.todo-title` 完全一致。`src/styles.css` 同步，文件头版本引用升至 v0.3.25。纯视觉。
 - **2026-09-20 v0.3.24**：**改名框去编辑态外显、日期输入去外框（§5.7）。** 修改建议：双击改名时输入框带了 surface+border-control+focus 环，和原显示行判若两物；日期条里开始/完成的外框也显重。实施方案：`.todo-name-input` 改 `font/color:inherit` + 透明无框无环无内边距（编辑态与显示一致）；`.edit-field input` 去 `border`/`background`/`radius`、focus 仅 `outline:none`（透明无边框、像纯文字，仍保留 `× .edit-clear` 与 native 选日）。`.date-strip` 容器与 `.btn` 不动。`src/styles.css` 同步，文件头版本引用升至 v0.3.24。纯视觉，数据格式无变化。
 - **2026-09-20 v0.3.23**：**编辑器拆成三入口——双击改名 / 点 checkbox 开日期条 / 换文件只能拖（重写 §5.7）。** 修改建议：一个整行大表单太重、且点 checkbox 盲切三态会凭空造今天日期；用户要"双击只改名沿用原样式、日期靠点 checkbox 出选项、文件夹只能拖动改"。实施方案：①删 `TodoEditor` 大表单 + 所在文件字段 + 只读状态块；②改名 = 双击 `.todo-title`→就地 `.todo-name-input`（沿用 `--fs-body`/`--text`，Enter/失焦提交、Esc 取消，编辑期禁拖）；③点 checkbox = 切换该行下方 `.todo-dates`/`.date-strip`（开始/完成 `type=date` + `×` +「标为完成(今天)`.btn`」，状态仍由日期派生、盒图标只读反映，移除 cycleState/nextState/STATE_CYCLE）；④换文件 = 拖到日历格或任务卡片（`moveTo` 走 `updateTodo` target，任意来源互通；日历落点复用高亮，任务卡片拖放高亮留后续）；⑤所有改动即时 `updateTodo` 写盘、无保存按钮；删 `.edit`/`.edit-area`/`.edit-row`/`.edit-loc*`/`.edit-actions`/`.edit-status`/`.btn-primary`/`li.todo.todo-editing` 等死样式。`src/styles.css` 加 `.todo-name-input`/`.todo-dates`/`.date-strip`，文件头版本引用升至 v0.3.23。数据格式无变化。

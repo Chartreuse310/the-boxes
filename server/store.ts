@@ -459,6 +459,39 @@ export async function updateTodo(
   }
 }
 
+/**
+ * 删除 = 软删除进垃圾箱：把该行原样移动到 `trash/<今天>.md`（应用不扫描 trash/，故从各视图消失、
+ * 但仍是可以用编辑器打开找回的 Markdown）。与移动同序——先写垃圾箱、再从源删行，绝不丢行。
+ * 文件不存在则建（含标题）。跨文件不要求 id 唯一（各文件内定位），原 id 保留。
+ */
+export async function trashTodo(dataDir: string, source: TodoSourceRef, id: string): Promise<void> {
+  const srcFile = fileFor(dataDir, source)
+  const lines = (await readFile(srcFile, 'utf8')).split('\n')
+  const idx = lines.findIndex((l) => LINE_RE.test(l) && l.match(ID_RE)?.[2] === id)
+  if (idx === -1) throw new Error(`todo 不存在：^${id}`)
+  const line = lines[idx]
+
+  const date = localDate()
+  const trashFile = path.join(dataDir, 'trash', `${date}.md`)
+  let content: string
+  try {
+    content = await readFile(trashFile, 'utf8')
+  } catch {
+    await mkdir(path.dirname(trashFile), { recursive: true })
+    content = `# 垃圾箱 ${date}\n\n`
+    await writeFile(trashFile, content)
+  }
+  const base = content === '' || content.endsWith('\n') ? content : content + '\n'
+  await writeFile(trashFile, `${base}${line}\n`)
+
+  const srcLines = (await readFile(srcFile, 'utf8')).split('\n')
+  const srcIdx = srcLines.findIndex((l) => LINE_RE.test(l) && l.match(ID_RE)?.[2] === id)
+  if (srcIdx !== -1) {
+    srcLines.splice(srcIdx, 1)
+    await writeFile(srcFile, srcLines.join('\n'))
+  }
+}
+
 // —— 上手示例（onboarding）：空目录首次打开自动铺一份自解释的示例数据，界面可一键清空 ——
 // 标记文件记在数据目录根，扫描 inbox/tasks 时不会读到它；有它 = 已处理过（含"已清空"），故不再重铺。
 

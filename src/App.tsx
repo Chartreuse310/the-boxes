@@ -205,6 +205,28 @@ function HomeIcon() {
   )
 }
 
+/**
+ * 垃圾箱图标：矢量绘制（§5.1 禁 emoji 作界面元素）。垃圾桶轮廓 + 盖 + 两道竖纹，
+ * stroke 2 / viewBox 24，随 --text-secondary。仅用于拖动时底部的删除落点。
+ */
+function TrashIcon() {
+  return (
+    <svg className="trash-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M4 7h16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" />
+      <path
+        d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M9 7V4h6v3" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M10 11v6M14 11v6" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" />
+    </svg>
+  )
+}
+
 /** 平铺视图的一组：来源相同的相邻行（/api/all 的排序已保证同文件行相邻） */
 interface TodoGroup {
   key: string
@@ -428,6 +450,9 @@ export default function App() {
   const [nameDraft, setNameDraft] = useState('')
   // 日期条：点 checkbox 展开该行的起止日期编辑，datesKey = 展开的行 key。
   const [datesKey, setDatesKey] = useState<string | null>(null)
+  // 拖拽中：显示底部垃圾箱落点；trashOver = 正悬停在垃圾箱上。
+  const [dragging, setDragging] = useState(false)
+  const [trashOver, setTrashOver] = useState(false)
   // 上手示例是否仍在（决定顶部「清空示例」横幅显隐）。启动播种在服务器侧完成，这里只查状态。
   const [demoActive, setDemoActive] = useState(false)
 
@@ -568,6 +593,24 @@ export default function App() {
     await patchTodo(t, { target })
   }
 
+  // 拖进底部垃圾箱 = 软删除（移进 trash/，从视图消失但文件里仍可找回）。
+  const dropToTrash = async () => {
+    const d = drag.current
+    drag.current = null
+    setDragging(false)
+    setTrashOver(false)
+    if (!d) return
+    try {
+      await api.trashTodo(d.source, d.id)
+    } catch {
+      refreshView()
+      return
+    }
+    api.listDays().then(setDays).catch(() => {})
+    api.listTasks().then(setTasks).catch(() => {})
+    refreshView()
+  }
+
   // 拖动重排：只在同一来源文件内落子——单文件视图=整列表，平铺视图=该组内；跨来源的落点忽略
   // （平铺按来源分组，组间无全序意义，迁移走日历）。新顺序直接从当前 todos 的该来源子序列算，
   // 不经 setTodos 的 updater（React 18 批处理下同步代码读不到它赋的值）。
@@ -699,9 +742,12 @@ export default function App() {
           // 声明这是移动而非复制：否则浏览器默认在游标旁画「+」角标，误导成「会复制」
           e.dataTransfer.effectAllowed = 'move'
           drag.current = { index: i, id: t.id, source: t.source }
+          setDragging(true)
         }}
         onDragEnd={() => {
           drag.current = null
+          setDragging(false)
+          setTrashOver(false)
         }}
         onDragOver={(e) => {
           e.preventDefault()
@@ -1004,6 +1050,31 @@ export default function App() {
       </div>
 
       <footer className="muted">{footerInfo ?? '数据存于本地 Markdown 文件'}</footer>
+
+      {/* 拖动中才浮出的底部删除落点：把行拖进来 = 软删除进垃圾箱 */}
+      {dragging && (
+        <div
+          className={'trash-drop' + (trashOver ? ' is-over' : '')}
+          role="button"
+          aria-label="拖到此处删除（进垃圾箱）"
+          onDragOver={(e) => {
+            if (!drag.current) return
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'move'
+            if (!trashOver) setTrashOver(true)
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setTrashOver(false)
+          }}
+          onDrop={(e) => {
+            e.preventDefault()
+            void dropToTrash()
+          }}
+        >
+          <TrashIcon />
+          <span>拖到此处删除 · 进垃圾箱</span>
+        </div>
+      )}
     </div>
   )
 }

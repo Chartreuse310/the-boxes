@@ -16,6 +16,7 @@ import {
   setTodoStateInFile,
   taskPath,
   touchDay,
+  trashTodo,
   updateTodo,
   type TodoSourceRef,
   type TodoState,
@@ -275,6 +276,19 @@ function boxesApi(dataDir: string): Plugin {
             if ('done' in b) patch.done = b.done == null ? null : String(b.done)
             if (b.target) patch.target = b.target as TodoSourceRef
             await updateTodo(dataDir, src, id, patch)
+            return { ok: true }
+          })
+          return
+        }
+
+        // POST /api/todos/trash : 软删除——把整行移进 trash/<今天>.md（拖进底部垃圾箱）
+        if (req.method === 'POST' && /^\/todos\/trash$/.test(pathname)) {
+          handle(async () => {
+            const b = await readBody()
+            const src = b.source as TodoSourceRef | undefined
+            const id = String(b.id ?? '')
+            if (!src || !id) throw new Error('缺少 source 或 id')
+            await trashTodo(dataDir, src, id)
             return { ok: true }
           })
           return

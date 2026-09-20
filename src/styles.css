@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.25（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.26（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -621,7 +621,7 @@ h1 {
   background: var(--bg-hover);
 }
 
-/* 通用次级按钮（日期条「标为完成」与示例横幅「清空示例」共用） */
+/* ---------- 通用次级按钮（日期条「标为完成」与示例横幅「清空示例」共用） ---------- */
 .btn {
   font: inherit;
   font-size: var(--fs-label);
@@ -641,6 +641,38 @@ h1 {
 .btn:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--accent-focus);
+}
+
+/* ---------- 垃圾箱落点（拖动 todo 时浮出的底部删除区，style-guide §5.9）---------- */
+/* 仅拖动中出现：固定底部居中的浮层。surface + border-control + --radius-pop + --shadow-pop
+   （浮层是 box-shadow 的唯一例外，§6）。悬停高亮复用 --accent（可交互目标语义，同日历/焦点）。 */
+.trash-drop {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-pop);
+  box-shadow: var(--shadow-pop);
+  color: var(--text-secondary);
+  font-size: var(--fs-label);
+  z-index: 20;
+}
+.trash-drop.is-over {
+  background: var(--accent-focus);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.trash-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex: none;
 }
 
 /* ---------- 列表 ---------- */

@@ -100,6 +100,8 @@ export interface BoxesApi {
     id: string,
     patch: { text?: string; start?: string | null; done?: string | null; target?: TodoSource },
   ): Promise<void>
+  /** 软删除：把整行移进 trash/<今天>.md（拖进底部垃圾箱）。数据仍在文件里，可打开找回。 */
+  trashTodo(source: TodoSource, id: string): Promise<void>
 }
 
 const httpApi: BoxesApi = {
@@ -225,6 +227,14 @@ const httpApi: BoxesApi = {
       body: JSON.stringify({ source, id, ...patch }),
     })
     if (!r.ok) throw new Error(`editTodo 失败：${r.status} ${await r.text()}`)
+  },
+  trashTodo: async (source, id) => {
+    const r = await fetch('/api/todos/trash', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source, id }),
+    })
+    if (!r.ok) throw new Error(`trashTodo 失败：${r.status} ${await r.text()}`)
   },
 }
 
