@@ -1,6 +1,6 @@
 # the-boxes · 界面风格规则（Style Guide）
 
-> 版本 v0.3.26 · 2026-09-20 · **本文是界面视觉的唯一事实源。**
+> 版本 v0.3.27 · 2026-09-20 · **本文是界面视觉的唯一事实源。**
 > `src/styles.css` 必须服从本文；两者不一致时，以本文为准，并视为待修复缺陷。
 > 视觉改动流程：先改本文 → 再改 `styles.css` → 在文末变更日志追加一条。
 
@@ -341,12 +341,11 @@
 
 ### 5.9 垃圾箱落点（拖动 todo 时浮出的删除区，v0.3.26 起）
 
-**只在拖拽进行中出现**：底部居中浮出一个删除落点，把行拖进来 = 软删除进 `trash/`（不弹确认，松手即生效，可在文件里找回）。
+**只在拖拽进行中出现**：底部居中浮出一个**圆形图标按钮**（只有一个圈 + 垃圾桶图标，**无文案**），把行拖进来 = 软删除进 `trash/`（不弹确认，松手即生效，可在文件里找回）。读屏靠 `aria-label`「拖到此处删除（进垃圾箱）」，视觉不铺字。
 
-- 形态：`position:fixed` 底部居中（`transform:translateX(-50%)`，非悬停位移），横向 flex、图标 + 文案、gap 8px、内边距 10×18。`--bg-surface` + `1px solid var(--border-control)` + `--radius-pop` + `--shadow-pop`（浮层是 §6 阴影唯一例外）。`z-index` 高于内容。
-- 图标：矢量 `TrashIcon`（垃圾桶轮廓 + 盖 + 两道竖纹，18px / stroke 2 / viewBox 24 / `--text-secondary`）——§5.1 禁 emoji。
-- 文案：12px `--fs-label`、`--text-secondary`，「拖到此处删除 · 进垃圾箱」；界面文案不含实现细节。
-- 拖放高亮（`.is-over`）：`--accent-focus` 底 + `--accent` 描边 + 文字转 `--text`，与日历迁移落点同一套"可交互目标"语义（§5.3），不引入新色。
+- 形态：`position:fixed` 底部居中（`transform:translateX(-50%)`，非悬停位移），`56px` 圆（`border-radius:50%`）、`display:grid` 居中图标。`--bg-surface` + `1px solid var(--border-control)` + `--shadow-pop`（浮层是 §6 阴影唯一例外）。`z-index` 高于内容。
+- 图标：矢量 `TrashIcon`（垃圾桶轮廓 + 盖 + 两道竖纹，`26px` / stroke 2 / viewBox 24 / `--text-secondary`）——§5.1 禁 emoji。
+- 拖放高亮（`.is-over`）：`--accent-focus` 底 + `--accent` 描边 + 图标转 `--accent`，与日历迁移落点同一套"可交互目标"语义（§5.3），不引入新色。
 
 ## 6. 禁止项
 
@@ -394,6 +393,7 @@
 
 ## 变更日志
 
+- **2026-09-20 v0.3.27**：**垃圾箱落点改为圆形纯图标（去文案，§5.9）。** 修改建议：底部删除区"拖到此处删除…"文字多余，只要一个圈 + 垃圾桶图标即可，读屏留 `aria-label`。实施方案：`.trash-drop` 由带文字的横向浮层改 `56px` 圆（`display:grid` 居中、`border-radius:50%`、无 padding/gap），图标 `--trash-icon` 18→26px，`.is-over` 文字色改图标色 `--accent`；JSX 去掉文案 `<span>`。`src/styles.css` 同步，文件头版本引用升至 v0.3.27。纯视觉，数据格式无变化。
 - **2026-09-20 v0.3.26**：**新增 §5.9 垃圾箱落点（拖动时浮出的软删除区）。** 修改建议：需要删除 todo，但"数据即文件"下直接抹行太狠；改为拖动时底部浮出垃圾箱，松手 = 整行移进 `trash/`（可找回）。实施方案：§5.9——仅拖拽中出现、固定底部居中浮层（surface/border-control/radius-pop/shadow-pop，浮层是 §6 阴影唯一例外）、矢量 `TrashIcon`、拖放高亮复用 `--accent-focus`+`--accent`（同日历落点语义）；`transform:translateX(-50%)` 是居中非悬停位移。`src/styles.css` 落地 `.trash-drop`/`.trash-icon`，文件头版本引用升至 v0.3.26。
 - **2026-09-20 v0.3.25**：**修改名框双击后文字位移（§5.7）。** 现象：`.todo-name-input` 用 `flex:1` 当 flex 子项，基线/行高与块级 `.todo-title` 不一致，进入编辑时描述文字跳一下。修法：改名框改 `display:block` + `width:100%` + `line-height:inherit`（+ 已无框/无内边距），落点与 `.todo-title` 完全一致。`src/styles.css` 同步，文件头版本引用升至 v0.3.25。纯视觉。
 - **2026-09-20 v0.3.24**：**改名框去编辑态外显、日期输入去外框（§5.7）。** 修改建议：双击改名时输入框带了 surface+border-control+focus 环，和原显示行判若两物；日期条里开始/完成的外框也显重。实施方案：`.todo-name-input` 改 `font/color:inherit` + 透明无框无环无内边距（编辑态与显示一致）；`.edit-field input` 去 `border`/`background`/`radius`、focus 仅 `outline:none`（透明无边框、像纯文字，仍保留 `× .edit-clear` 与 native 选日）。`.date-strip` 容器与 `.btn` 不动。`src/styles.css` 同步，文件头版本引用升至 v0.3.24。纯视觉，数据格式无变化。

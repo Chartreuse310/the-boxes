@@ -207,7 +207,7 @@ function HomeIcon() {
 
 /**
  * 垃圾箱图标：矢量绘制（§5.1 禁 emoji 作界面元素）。垃圾桶轮廓 + 盖 + 两道竖纹，
- * stroke 2 / viewBox 24，随 --text-secondary。仅用于拖动时底部的删除落点。
+ * stroke 2 / viewBox 24，尺寸由 CSS 给（.trash-icon 26px）。仅用于拖动时底部的删除落点。
  */
 function TrashIcon() {
   return (
@@ -1072,7 +1072,6 @@ export default function App() {
           }}
         >
           <TrashIcon />
-          <span>拖到此处删除 · 进垃圾箱</span>
         </div>
       )}
     </div>
