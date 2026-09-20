@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.29（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.30（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -160,20 +160,6 @@ h1 {
   display: block;
   width: 18px;
   height: 18px;
-}
-/* 右上角操作区：垃圾箱入口 + home（同尺寸图标按钮，横排） */
-.head-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-.home-btn[aria-current='true'] {
-  color: var(--text);
-}
-/* 垃圾箱入口：正在看垃圾箱时图标加深，表明当前视图 */
-.trash-entry[aria-current='true'] {
-  color: var(--text);
-  background: var(--bg-sunken);
 }
 
 /* ---------- 布局：左侧 mini 日历 + 任务卡片，右侧 todo 列表 ---------- */
@@ -380,6 +366,17 @@ h1 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* 垃圾箱入口（任务卡片下方）：图标缩到与卡片文字齐平，计数右对齐 */
+.sidebar-trash {
+  margin-top: 8px;
+}
+.trash-entry .trash-icon {
+  width: 16px;
+  height: 16px;
+}
+.trash-entry .task-top .task-name {
+  flex: 1 1 auto;
 }
 
 /* ---------- 平铺分组：组头 = 来源文件名称 ---------- */

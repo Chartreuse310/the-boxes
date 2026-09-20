@@ -873,35 +873,19 @@ export default function App() {
           </span>
           <h1>the-boxes</h1>
         </div>
-        {/* 右上角操作区：垃圾箱入口（有内容才出现）+ home 回平铺 */}
-        <div className="head-actions">
-          {trash.length > 0 && (
-            <button
-              type="button"
-              className="home-btn trash-entry"
-              onClick={() => setView(view?.kind === 'trash' ? { kind: 'all' } : { kind: 'trash' })}
-              aria-label={`垃圾箱，${trash.length} 项`}
-              title={`垃圾箱（${trash.length} 项）`}
-              aria-current={view?.kind === 'trash' ? 'true' : undefined}
-            >
-              <TrashIcon />
-            </button>
-          )}
-          {/* home：回到平铺（默认视图）。取代原主区文字按钮「接下来干啥？」——
-              平铺不需要自报家门，返回入口收到页面右上角 */}
-          <button
-            type="button"
-            className="home-btn"
-            onClick={() => {
-              if (view?.kind !== 'all') setView({ kind: 'all' })
-            }}
-            aria-label="回到平铺"
-            title="回到平铺"
-            aria-current={view?.kind === 'all' ? 'true' : undefined}
-          >
-            <HomeIcon />
-          </button>
-        </div>
+        {/* home：回到平铺（默认视图）。垃圾箱入口改到左栏任务卡片底部，见 sidebar。 */}
+        <button
+          type="button"
+          className="home-btn"
+          onClick={() => {
+            if (view?.kind !== 'all') setView({ kind: 'all' })
+          }}
+          aria-label="回到平铺"
+          title="回到平铺"
+          aria-current={view?.kind === 'all' ? 'true' : undefined}
+        >
+          <HomeIcon />
+        </button>
       </header>
 
       <div className="layout">
@@ -952,6 +936,24 @@ export default function App() {
                   </button>
                 )
               })}
+            </nav>
+          )}
+
+          {/* 垃圾箱入口：非空时置于任务卡片下方（同款 task-card 样式，图标 + 计数） */}
+          {trash.length > 0 && (
+            <nav className="task-list sidebar-trash" aria-label="垃圾箱">
+              <button
+                type="button"
+                className={'task-card trash-entry' + (view?.kind === 'trash' ? ' is-selected' : '')}
+                onClick={() => setView(view?.kind === 'trash' ? { kind: 'all' } : { kind: 'trash' })}
+                aria-current={view?.kind === 'trash' ? 'true' : undefined}
+              >
+                <span className="task-top">
+                  <TrashIcon />
+                  <span className="task-name">垃圾箱</span>
+                  <span className="task-month">{trash.length}</span>
+                </span>
+              </button>
             </nav>
           )}
         </aside>

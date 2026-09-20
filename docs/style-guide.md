@@ -1,6 +1,6 @@
 # the-boxes · 界面风格规则（Style Guide）
 
-> 版本 v0.3.29 · 2026-09-20 · **本文是界面视觉的唯一事实源。**
+> 版本 v0.3.30 · 2026-09-20 · **本文是界面视觉的唯一事实源。**
 > `src/styles.css` 必须服从本文；两者不一致时，以本文为准，并视为待修复缺陷。
 > 视觉改动流程：先改本文 → 再改 `styles.css` → 在文末变更日志追加一条。
 
@@ -346,7 +346,7 @@
 - 形态：`position:fixed` 底部居中（`transform:translateX(-50%)`，非悬停位移），`56px` 圆（`border-radius:50%`）、`display:grid` 居中图标。`--bg-surface` + `1px solid var(--border-control)` + `--shadow-pop`（浮层是 §6 阴影唯一例外）。`z-index` 高于内容。
 - 图标：矢量 `TrashIcon`（垃圾桶轮廓 + 盖 + 两道竖纹，`26px` / stroke 2 / viewBox 24 / `--text-secondary`）——§5.1 禁 emoji。
 - 拖放高亮（`.is-over`）：`--accent-focus` 底 + `--accent` 描边 + 图标转 `--accent`，与日历迁移落点同一套"可交互目标"语义（§5.3），不引入新色。
-- **入口（v0.3.28）**：垃圾箱**非空时**，右上角 `home` 左边出现一枚同款图标按钮（`.home-btn.trash-entry`，`--text-secondary`、`aria-label`「垃圾箱，N 项」）；空则不出现。点击进 / 再点回平铺，当前视图时 `aria-current` → 图标加深 + `--bg-sunken` 底。图标按钮恒等尺寸，不额外加重。
+- **入口（v0.3.28，v0.3.30 移位）**：垃圾箱**非空时**，入口置于**左栏任务卡片列表最下方**——一枚同款 `.task-card`（`.trash-entry`：`TrashIcon` 缩到 16px + "垃圾箱" 名称 + 右端计数），随任务卡片左对齐、`is-selected` 表当前视图。任务列表为空时该入口仍在（`.sidebar-trash` 顶开 8px）。点击进 / 再点回平铺。
 - **视图**：进 `trash` 视图后主区顶部 `.view-head`（标题「垃圾箱」`--fs-title` + 右端「清空垃圾箱」`.btn`），下方一行 `.trash-hint` 说明可拖出恢复；列表复用普通 `.todo` 行（状态盒 + 标题 + `——删除于 <date>` 走 `.done-note`）。行**可拖出**：拖到日历某格或任务卡片 = 恢复到那里（`dragging` 不为垃圾箱行弹出底部删除箱，`dropToTrash` 亦拒绝垃圾箱自扔）；不提供"记原处"的恢复，落点即去处。空态复用 `.empty`。清空 = 删 `trash/` 下按日文件（不可恢复），按钮文案「清空垃圾箱」已明示。
 
 ## 6. 禁止项
@@ -390,12 +390,13 @@
 - [ ] 行内编辑三入口：改名=双击文字（就地 `.todo-name-input`，沿用显示字号字色）；起止日期=点 checkbox 展开 `.date-strip`（开始/完成 + 快捷完成，状态只读派生）；换文件=只能拖到日历格/任务卡片（编辑器内无所在文件字段）。「盲切三态」是否已移除、不再凭空造日期？（§5.7）
 - [ ] 上手示例横幅是否 surface 底 + `--divider` 描边（非 border-control）、按钮复用 `.btn`（描边落在 surface 达标）；示例不在时是否整条不渲染？（§5.8）
 - [ ] 垃圾箱落点是否仅在拖动中出现、固定底部居中浮层（surface/border-control/radius-pop/shadow-pop）、图标为矢量非 emoji、拖放高亮复用 `--accent`？（§5.9）
-- [ ] 垃圾箱入口（图标按钮）是否仅非空时出现、与 home 同尺寸、当前视图 aria-current 加深；垃圾箱视图复用普通 `.todo` 行、可拖出到日历/卡片恢复（拖时不弹底部删除箱）、「清空垃圾箱」文案明示不可逆？（§5.9）
+- [ ] 垃圾箱入口（非空才现、置于左栏任务卡片最下方、同款 task-card + 16px 图标 + 计数、is-selected 表当前视图）；垃圾箱视图复用普通 `.todo` 行、可拖出到日历/卡片恢复（拖时不弹底部删除箱）、「清空垃圾箱」文案明示不可逆？（§5.9）
 - [ ] 进行中是否为"45° 分割、左上填满"的半填充圆？且 `.box` 保留 `overflow: hidden`、`.box-half` 尺寸 = `--checkbox-size`（改任一项都会在弧上露缝）？
 - [ ] `aria-label` 是否也过了上一条？（读屏用户同样会听到内部枚举名，但看不到界面，问题更难被发现）
 
 ## 变更日志
 
+- **2026-09-20 v0.3.30**：**垃圾箱入口从右上角移到左栏任务卡片底部（§5.9）。** 修改建议：入口是"进某个容器"的导航，和任务/日期同属左栏才顺；右上角只有一个 home 更干净。实施方案：入口由 header 图标按钮改为 `.task-list.sidebar-trash` 里一枚 `.task-card.trash-entry`（`TrashIcon` 16px + "垃圾箱" + `.task-month` 计数、`is-selected` 表当前视图、任务列表为空时仍显、顶开 8px）；header 恢复只留 home。删 `.head-actions`/`.home-btn[aria-current]`/`.trash-entry[aria-current]`。`src/styles.css` 加 `.sidebar-trash`/`.trash-entry .trash-icon`，文件头版本引用升至 v0.3.30。纯布局，数据格式无变化。
 - **2026-09-20 v0.3.29**：**垃圾箱行可拖出恢复（§5.9 视图）。** 修改建议：不做"记原处"的恢复；已软删的行拖到日历/任务即可恢复到那（落点即去处）。实施方案：视图行 `draggable`（源 `trash`），复用 moveTo 落到 day/task；拖垃圾箱行时**不**置 `dragging`（不弹底部删除箱），`dropToTrash` 亦拒绝 `trash` 源自扔；加一行 `.trash-hint` 提示；后端 `TodoSourceRef`/`fileFor`/`sameSrc`/`updateTodo` 移动分支支持 `trash` 作来源（写目标在前再删源，防丢），`AnySource` 贯通。`src/styles.css` 加 `.trash-hint`，文件头版本引用升至 v0.3.29。无新增可视恢复按钮，数据格式无变化（trash/ 已 v2.4 登记）。
 - **2026-09-20 v0.3.28**：**§5.9 补垃圾箱入口与视图（查看 / 清空）。** 修改建议：软删除后 trash 里的行只能开文件看，需要一个应用内入口。实施方案：①非空时右上角 home 左侧加同款图标按钮 `.trash-entry`（`aria-label` 计数、当前视图 `aria-current` 加深 + `--bg-sunken`）；②新增 `trash` 视图：主区 `.view-head`（标题 + 右端「清空垃圾箱`.btn`」）+ 列表复用只读 `.todo` 行（`——删除于 <date>` 走 `.done-note`）+ `.empty` 空态；`.view-title` 用 `--fs-title`。`src/styles.css` 加 `.head-actions`/`.trash-entry`/`.view-head`/`.view-title`，文件头版本引用升至 v0.3.28。恢复（放回原文件）需记来源、暂不做，留 PLAN。
 - **2026-09-20 v0.3.27**：**垃圾箱落点改为圆形纯图标（去文案，§5.9）。** 修改建议：底部删除区"拖到此处删除…"文字多余，只要一个圈 + 垃圾桶图标即可，读屏留 `aria-label`。实施方案：`.trash-drop` 由带文字的横向浮层改 `56px` 圆（`display:grid` 居中、`border-radius:50%`、无 padding/gap），图标 `--trash-icon` 18→26px，`.is-over` 文字色改图标色 `--accent`；JSX 去掉文案 `<span>`。`src/styles.css` 同步，文件头版本引用升至 v0.3.27。纯视觉，数据格式无变化。
