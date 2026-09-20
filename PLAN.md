@@ -1,6 +1,6 @@
 # the-boxes · 开发与易用性测试计划
 
-> 版本 v0.2.35 · 2026-09-20 · 本文是活文档，每个里程碑结束时回顾更新，变更见文末【变更日志】
+> 版本 v0.2.36 · 2026-09-20 · 本文是活文档，每个里程碑结束时回顾更新，变更见文末【变更日志】
 
 ## 1. 产品定义
 
@@ -56,7 +56,7 @@
 
 ## 3. 数据格式（摘要）
 
-细节以 [SPEC.md](SPEC.md) 为准（v2.4），要点：
+细节以 [SPEC.md](SPEC.md) 为准（v2.5），要点：
 
 ```
 ~/the-boxes/                   # 数据目录（独立于代码仓库）
@@ -78,7 +78,7 @@
 - [/] 写 the-boxes 的 SPEC ^a02x
 - [x] 晨跑 30 分钟 @done:2026-09-19 ^b7q1
 - [ ] 买生日礼物 @2026-09-22 ^d4n7
-- [ ] 挑瓷砖 +装修 ^e5p8          # +任务名 = 归属任务
+- [ ] 挑瓷砖 +装修 ^e5p8          # 遗留：归属现由所在文件决定，新界面不再写 +任务
 ```
 
 ## 4. 里程碑
@@ -340,6 +340,8 @@ the-boxes/                # 开源代码仓库
 - `package.json` 中 `"version": "0.0.1"` 即当前项目版本号，规则以此章为准；`M1` 里程碑 = 未来 `v0.1.x` 线，尚未开启
 
 ## 变更日志
+
+- **2026-09-20** v0.2.36：dogfood 前对齐审计——删死代码 + 统一 `+任务` 文档（不改交互/格式）。发现并清理：①**死代码链**：交互改版后 UI 不再调 `setState/taskSetState/migrate/ensureIds/taskEnsureIds`，删其 api 方法、`/state`·`/migrate`·`/ensure-ids` 5 条路由、store 里 `setTodoStateInFile/setState/migrateTodo/ensureIds` 及 vite 的 `dayExistsFor`（`ensureIdsInFile` 内部仍用、保留）；②**文档漂移**：SPEC §4/§2、README、PLAN §3 把 `+任务` 当"归属任务/任务视图聚合"（既不属实、代码也未实现聚合）→ 统一改述为"遗留 token、归属=所在文件、任务视图不聚合 inbox 的 +任务"，`@start/@done` 写入时机改"日期条/标为完成"。SPEC v2.4→**v2.5**（纯澄清）。保留端点 addTodo/addTaskTodo/editTodo/reorder/trash/onboarding 全部 curl 复测通过。另修一处顺带发现的**既存隐患**：`reorderInFile` 在 id 集合对不上时会 `ensureIds` 后无限递归（畸形/并发过期的 order 触发）→ 改为至多重试一次、仍不符则报错，实测畸形请求 0.02s 返回 400、正常整列表 200。
 
 - **2026-09-20** v0.2.35：垃圾箱入口图标与文字垂直对齐（纯视觉，配合 style-guide v0.3.31）。`.task-top` 的 `baseline` 让 SVG 图标与文字错位 → 垃圾箱行改 `align-items:center`。数据格式无变化。
 

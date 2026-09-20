@@ -9,31 +9,16 @@ import {
   addTodo,
   clearOnboarding,
   emptyTrash,
-  ensureIdsInFile,
   getOnboarding,
   listTrash,
-  migrateTodo,
   reorderInFile,
   seedOnboardingIfEmpty,
-  setTodoStateInFile,
   taskPath,
-  touchDay,
   trashTodo,
   updateTodo,
   type TodoSourceRef,
-  type TodoState,
 } from './server/store'
 import { parseInbox, parseTask } from './src/lib/parser'
-
-/** 某日文件是否存在 */
-async function dayExistsFor(dataDir: string, date: string): Promise<boolean> {
-  try {
-    await readFile(path.join(dataDir, 'inbox', `${date}.md`), 'utf8')
-    return true
-  } catch {
-    return false
-  }
-}
 
 /**
  * 掃描 tasks/YYYY-MM/ 下全部任務文件（SPEC v2.2：任務按提出月份嵌套，防重名）。
@@ -312,47 +297,6 @@ function boxesApi(dataDir: string): Plugin {
         }
 
         // —— 写操作 ——
-        // PUT /api/days/:date/ensure-ids : 给缺失 id 的 todo 补 `^xxxx`
-        const mt = pathname.match(/^\/days\/(\d{4}-\d{2}-\d{2})\/ensure-ids$/)
-        if (req.method === 'PUT' && mt) {
-          handle(async () => {
-            const file = path.join(dataDir, 'inbox', `${mt[1]}.md`)
-            if (!(await dayExistsFor(dataDir, mt[1]))) await touchDay(dataDir, mt[1])
-            await ensureIdsInFile(file)
-            return { content: await readFile(file, 'utf8') }
-          })
-          return
-        }
-
-        // PUT /api/days/:date/todos/:id/state : 修改某 todo 状态（三态）
-        const ms = pathname.match(/^\/days\/(\d{4}-\d{2}-\d{2})\/todos\/([a-z0-9]+)\/state$/)
-        if (req.method === 'PUT' && ms) {
-          handle(async () => {
-            const body = await readBody()
-            const state = String(body.state ?? '')
-            const allowed = ['todo', 'doing', 'done']
-            if (!allowed.includes(state)) throw new Error(`非法状态：${state}`)
-            await setTodoStateInFile(path.join(dataDir, 'inbox', `${ms[1]}.md`), ms[2], state as TodoState)
-            return { ok: true }
-          })
-          return
-        }
-
-        // PUT /api/days/:date/todos/:id/migrate : 迁移（SPEC v2.0 整行原样移动）
-        // 源文件删行，目标日文件原样追加（文件不存在则创建）
-        const mm = pathname.match(/^\/days\/(\d{4}-\d{2}-\d{2})\/todos\/([a-z0-9]+)\/migrate$/)
-        if (req.method === 'PUT' && mm) {
-          handle(async () => {
-            const body = await readBody()
-            const target = String(body.target ?? '')
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(target)) throw new Error(`非法目标日期：${target}`)
-            if (target === mm[1]) throw new Error('目标日期与源文件相同，无迁移意义')
-            await migrateTodo(dataDir, mm[1], mm[2], target)
-            return { ok: true }
-          })
-          return
-        }
-
         // PUT /api/days/:date/reorder : 按给定 id 顺序重排
         const mr = pathname.match(/^\/days\/(\d{4}-\d{2}-\d{2})\/reorder$/)
         if (req.method === 'PUT' && mr) {
@@ -429,31 +373,6 @@ function boxesApi(dataDir: string): Plugin {
             const text = String(body.text ?? '')
             const { id } = await addTaskTodo(dataDir, at[1], at[2], text)
             return { ok: true, id }
-          })
-          return
-        }
-
-        // PUT /api/tasks/:month/:slug/ensure-ids : 给缺失 id 的 todo 补 `^xxxx`
-        const te = pathname.match(/^\/tasks\/(\d{4}-\d{2})\/([^/]+)\/ensure-ids$/)
-        if (req.method === 'PUT' && te) {
-          handle(async () => {
-            const file = taskPath(dataDir, te[1], te[2])
-            await ensureIdsInFile(file)
-            return { content: await readFile(file, 'utf8') }
-          })
-          return
-        }
-
-        // PUT /api/tasks/:month/:slug/todos/:id/state : 修改任务内某 todo 状态（三态）
-        const ts = pathname.match(/^\/tasks\/(\d{4}-\d{2})\/([^/]+)\/todos\/([a-z0-9]+)\/state$/)
-        if (req.method === 'PUT' && ts) {
-          handle(async () => {
-            const body = await readBody()
-            const state = String(body.state ?? '')
-            const allowed = ['todo', 'doing', 'done']
-            if (!allowed.includes(state)) throw new Error(`非法状态：${state}`)
-            await setTodoStateInFile(taskPath(dataDir, ts[1], ts[2]), ts[3], state as TodoState)
-            return { ok: true }
           })
           return
         }

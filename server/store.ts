@@ -1,5 +1,5 @@
 // 服务端存储逻辑：编辑/排序 todo 行（Node 侧，不进入前端 bundle）。
-// 定位策略：按行尾 `^id` 精确定位；手写行无 id 时，先 ensureIds 补齐。
+// 定位策略：按行尾 `^id` 精确定位；手写行无 id 时，reorder/seed 内部用 ensureIdsInFile 补齐。
 // 容错规则（SPEC §7）：非 todo 行原样保留，绝不重写无关内容。
 
 import { readFile, writeFile, mkdir, readdir, unlink } from 'node:fs/promises'
@@ -70,121 +70,12 @@ export async function ensureIdsInFile(file: string): Promise<void> {
   if (dirty) await writeFile(file, lines.join('\n'))
 }
 
-/** inbox 版：按日期定位文件 */
-export function ensureIds(dataDir: string, date: string): Promise<void> {
-  return ensureIdsInFile(inboxPath(dataDir, date))
-}
-
-/**
- * 修改某 id 的行状态（inbox 日文件与任务文件通用）。
- * - doing：写 @start:今天（若尚无）——开始日期
- * - done：写 @done:今天，清普通 @日期；保留 @start（完成时展示"始于…，完成于…"）
- * - todo：清 @done、@start 与 @日期，回到待处理
- */
-export async function setTodoStateInFile(
-  file: string,
-  id: string,
-  state: TodoState,
-): Promise<void> {
-  const content = await readFile(file, 'utf8')
-  const lines = content.split('\n')
-  const ch = STATE_CHAR[state]
-
-  for (let i = 0; i < lines.length; i++) {
-    const raw = lines[i]
-    const idM = raw.match(ID_RE)
-    // 只动三态行：带同 id 的未知行（如旧数据里的 [>]）原样跳过
-    if (!idM || idM[2] !== id || !LINE_RE.test(raw)) continue
-    // 替换状态符号：- [ ] → - [x]
-    lines[i] = raw.replace(/^(-\s\[)([ x/])(\])/, (_, p1, _p2, p3) => p1 + ch + p3)
-
-    if (state === 'doing') {
-      // 开始：若尚无 @start，追加今天
-      if (!/\s@start:\d{4}-\d{2}-\d{2}/.test(lines[i])) {
-        lines[i] = lines[i].trimEnd() + ` @start:${localDate()}`
-      }
-    } else if (state === 'done') {
-      // 完成：清普通 @日期 与 @done 冗余，写 @done:今天；保留 @start
-      lines[i] =
-        lines[i]
-          .replace(/\s@\d{4}-\d{2}-\d{2}/g, '')
-          .replace(/\s@done:\d{4}-\d{2}-\d{2}/g, '')
-          .trimEnd() + ` @done:${localDate()}`
-    } else {
-      // todo：回到待处理，清 @日期/@start/@done
-      lines[i] = lines[i]
-        .replace(/\s@\d{4}-\d{2}-\d{2}/g, '')
-        .replace(/\s@start:\d{4}-\d{2}-\d{2}/g, '')
-        .replace(/\s@done:\d{4}-\d{2}-\d{2}/g, '')
-    }
-    await writeFile(file, lines.join('\n'))
-    return
-  }
-  throw new Error(`todo 不存在：^${id}`)
-}
-
-/** inbox 版：按日期定位文件 */
-export function setState(
-  dataDir: string,
-  date: string,
-  id: string,
-  state: TodoState,
-): Promise<void> {
-  return setTodoStateInFile(inboxPath(dataDir, date), id, state)
-}
-
-/**
- * 迁移（SPEC v2.0）：把该行**原样移动**到目标日文件——
- * 状态、@start、@done、+任务、^id 全部保留，todo 身份不变；源文件删除该行。
- * 目标文件不存在时创建（含标题，与 touchDay 同一路径）。
- * 目标已有同 id 时（罕见）换新 id，避免身份撞车。
- */
-export async function migrateTodo(
-  dataDir: string,
-  fromDate: string,
-  id: string,
-  targetDate: string,
-): Promise<void> {
-  // 1) 从源文件摘出整行（原样，含全部 token）
-  const srcFile = inboxPath(dataDir, fromDate)
-  const lines = (await readFile(srcFile, 'utf8')).split('\n')
-  const idx = lines.findIndex((l) => l.match(ID_RE)?.[2] === id)
-  if (idx === -1) throw new Error(`todo 不存在：^${id}`)
-  const [line] = lines.splice(idx, 1)
-  await writeFile(srcFile, lines.join('\n'))
-
-  // 2) 目标文件：不存在则创建；原样追加
-  const target = inboxPath(dataDir, targetDate)
-  let content: string
-  try {
-    content = await readFile(target, 'utf8')
-  } catch {
-    await touchDay(dataDir, targetDate)
-    content = await readFile(target, 'utf8')
-  }
-  const existing = new Set<string>()
-  for (const raw of content.split('\n')) {
-    const m = raw.match(ID_RE)
-    if (m) existing.add(m[2])
-  }
-  let moved = line.trimEnd()
-  if (existing.has(id)) {
-    let newId: string
-    do {
-      newId = randomId()
-    } while (existing.has(newId))
-    moved = moved.replace(/\s\^[a-z0-9]+$/i, ` ^${newId}`)
-  }
-
-  const base = content === '' || content.endsWith('\n') ? content : content + '\n'
-  await writeFile(target, `${base}${moved}\n`)
-}
-
 /**
  * 按给定 id 顺序重排 todo 行（inbox 日文件与任务文件通用）。
  * 只在"纯 todo 块"内移动；非 todo 行（标题、空行）保持相对位置，绝不重写。
+ * id 数对不上时先补一次缺失 id 再试；仍不符则报错（防畸形请求无限递归）。
  */
-export async function reorderInFile(file: string, order: string[]): Promise<void> {
+export async function reorderInFile(file: string, order: string[], retried = false): Promise<void> {
   const content = await readFile(file, 'utf8')
   const lines = content.split('\n')
   const idToLine = new Map<string, string>()
@@ -201,9 +92,10 @@ export async function reorderInFile(file: string, order: string[]): Promise<void
   // 只重排存在于文件中的 id，忽略未知 id
   const validOrder = order.filter((id) => idToLine.has(id))
   if (validOrder.length !== todoIndexes.length) {
-    // 数量不符说明有 todo 无 id 或缺行：先补齐再交还。
+    if (retried) throw new Error('重排的 id 列表与文件不符')
+    // 有带状态但缺 id 的行：补齐一次再试（仅一次，避免对畸形 order 无限递归）
     await ensureIdsInFile(file)
-    return reorderInFile(file, order)
+    return reorderInFile(file, order, true)
   }
 
   const newLines = [...lines]
