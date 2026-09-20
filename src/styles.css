@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.24（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.25（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -545,19 +545,23 @@ h1 {
 }
 
 /* ---------- 行内编辑：改名（双击文字）+ 日期条（点 checkbox 展开）---------- */
-/* 改名框**完全沿用显示行的样式**（继承 .text 的字号与颜色、透明无框无环），编辑态不外显。 */
+/* 改名框**完全沿用显示行的样式**：块级、占满 .text 宽、继承字号字色与行高，
+   透明无框无环零内边距——文字落点与 .todo-title 一致，编辑态不外显也不位移。 */
 .todo-name-input {
-  flex: 1;
-  min-width: 0;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
   font: inherit;
+  line-height: inherit;
   color: inherit;
   background: transparent;
   border: none;
   border-radius: 0;
   padding: 0;
-}
-.todo-name-input:focus {
   outline: none;
+  text-indent: 0;
+  caret-color: var(--accent);
 }
 /* 日期条：所属行的下一行 li（缩进到文字起点下方），surface 细框，含 开始/完成 + 快捷完成 */
 .todo-dates {
