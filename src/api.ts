@@ -51,6 +51,12 @@ export type TodoSource =
   | { kind: 'day'; date: string }
   | { kind: 'task'; month: string; slug: string }
 
+/** 垃圾箱来源文件（拖出 = 恢复，落点由拖放决定，不记原处）。 */
+export type TrashSource = { kind: 'trash'; date: string }
+
+/** 编辑 / 移动可指向的任意来源（含垃圾箱） */
+export type AnySource = TodoSource | TrashSource
+
 /** 平铺视图的 todo：解析结果 + 来源（点击/迁移按来源分叉调接口） */
 export interface SourcedTodo extends Todo {
   source: TodoSource
@@ -105,7 +111,7 @@ export interface BoxesApi {
    * target 改所在文件，与来源不同即整行移动过去。
    */
   editTodo(
-    source: TodoSource,
+    source: AnySource,
     id: string,
     patch: { text?: string; start?: string | null; done?: string | null; target?: TodoSource },
   ): Promise<void>

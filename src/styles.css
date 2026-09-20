@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.28（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.29（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -702,6 +702,11 @@ h1 {
   font-weight: 600;
   letter-spacing: -0.02em;
   margin: 0;
+}
+.trash-hint {
+  font-size: var(--fs-meta);
+  color: var(--text-secondary);
+  margin: 0 0 4px;
 }
 
 /* ---------- 列表 ---------- */

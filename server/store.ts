@@ -8,10 +8,11 @@ import { parseInbox } from '../src/lib/parser'
 
 export type TodoState = 'todo' | 'doing' | 'done'
 
-/** todo 所在文件的定位（inbox 某日 / 任务某月某名）——编辑与移动的通用参数 */
+/** todo 所在文件的定位——编辑与移动的通用参数。trash = 垃圾箱文件（拖出即恢复，落点由拖放决定，不记原处）。 */
 export type TodoSourceRef =
   | { kind: 'day'; date: string }
   | { kind: 'task'; month: string; slug: string }
+  | { kind: 'trash'; date: string }
 
 const STATE_CHAR: Record<TodoState, string> = {
   todo: ' ',
@@ -346,7 +347,14 @@ export async function addTaskTodo(
 
 /** 任务文件绝对路径（校验后）。 */
 function fileFor(dataDir: string, src: TodoSourceRef): string {
-  return src.kind === 'day' ? inboxPath(dataDir, assertDay(src.date)) : taskPath(dataDir, src.month, src.slug)
+  if (src.kind === 'day') return inboxPath(dataDir, assertDay(src.date))
+  if (src.kind === 'task') return taskPath(dataDir, src.month, src.slug)
+  return trashPath(dataDir, src.date)
+}
+
+/** 垃圾箱文件路径（按删除日一天一文件）。 */
+function trashPath(dataDir: string, date: string): string {
+  return path.join(dataDir, 'trash', `${assertDay(date)}.md`)
 }
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -358,6 +366,7 @@ function assertDay(date: string): string {
 function sameSrc(a: TodoSourceRef, b: TodoSourceRef): boolean {
   if (a.kind !== b.kind) return false
   if (a.kind === 'day') return b.kind === 'day' && a.date === b.date
+  if (a.kind === 'trash') return b.kind === 'trash' && a.date === b.date
   return b.kind === 'task' && a.month === b.month && a.slug === b.slug
 }
 
@@ -383,6 +392,19 @@ async function ensureDayFile(dataDir: string, date: string): Promise<string> {
   } catch {
     await touchDay(dataDir, date)
     return await readFile(file, 'utf8')
+  }
+}
+
+/** 垃圾箱文件：存在则读，缺失则建（含 `# 垃圾箱 <日期>` 标题）后返回内容。 */
+async function ensureTrashFile(dataDir: string, date: string): Promise<string> {
+  const file = trashPath(dataDir, date)
+  try {
+    return await readFile(file, 'utf8')
+  } catch {
+    await mkdir(path.dirname(file), { recursive: true })
+    const content = `# 垃圾箱 ${date}\n\n`
+    await writeFile(file, content)
+    return content
   }
 }
 
@@ -434,7 +456,9 @@ export async function updateTodo(
   const tgtContent =
     target.kind === 'day'
       ? await ensureDayFile(dataDir, target.date)
-      : await ensureTaskFile(dataDir, target.month, target.slug)
+      : target.kind === 'task'
+        ? await ensureTaskFile(dataDir, target.month, target.slug)
+        : await ensureTrashFile(dataDir, target.date)
   const existing = new Set<string>()
   for (const raw of tgtContent.split('\n')) {
     const m = raw.match(ID_RE)

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import { api, type BoxesInfo, type SourcedTodo, type TaskSummary, type TodoSource, type TrashItem } from './api'
+import { api, type AnySource, type BoxesInfo, type SourcedTodo, type TaskSummary, type TodoSource, type TrashItem } from './api'
 import { parseInbox, parseTask, type TaskMeta, type TodoState } from './lib/parser'
 
 /**
@@ -435,8 +435,8 @@ export default function App() {
   const [todos, setTodos] = useState<SourcedTodo[] | null>(null)
   // 任务视图的元数据（day / all 视图为 null）
   const [taskMeta, setTaskMeta] = useState<TaskMeta | null>(null)
-  // 拖动中的 todo：day 视图列表内 drop → 重排；拖到日历日期上 → 迁移
-  const drag = useRef<{ index: number; id: string; source: SourcedTodo['source'] } | null>(null)
+  // 拖动中的 todo：源可含垃圾箱（AnySource）。day 视图列表内 drop → 重排；拖到日历/卡片 → 换文件（从 trash 拖出即恢复）
+  const drag = useRef<{ index: number; id: string; source: AnySource } | null>(null)
   // 运行环境信息（数据目录 / 版本）：只用于 footer。取不到就不显示那一段，不阻塞界面。
   const [info, setInfo] = useState<BoxesInfo | null>(null)
   // 添加框草稿（all / day 视图输入，回车提交后清空）
@@ -596,13 +596,25 @@ export default function App() {
     setDatesKey((k) => (k === rowKey(t) ? null : rowKey(t)))
   }
 
-  // 拖拽改文件（唯一入口）：拖到日历某格 → 移到那天；拖到任务卡片 → 移进该任务。任意来源皆可。
+  // 拖拽换文件（也是垃圾箱行的"恢复"）：拖到日历某格 → 移到那天；拖到任务卡片 → 移进该任务。
+  // 直接吃 drag.current（源可为 trash），不记原处——落点即去处。同文件则跳过。
   const moveTo = async (target: TodoSource) => {
-    const dragged = drag.current
+    const d = drag.current
     drag.current = null
-    const t = dragged && todos?.find((x) => x.id === dragged.id && sameSource(x.source, dragged.source))
-    if (!t || sameSource(target, t.source)) return
-    await patchTodo(t, { target })
+    setDragging(false)
+    setTrashOver(false)
+    if (!d) return
+    if (d.source.kind !== 'trash' && sameSource(d.source, target)) return
+    try {
+      await api.editTodo(d.source, d.id, { target })
+    } catch {
+      refreshView()
+      return
+    }
+    api.listDays().then(setDays).catch(() => {})
+    api.listTasks().then(setTasks).catch(() => {})
+    loadTrash()
+    refreshView()
   }
 
   // 拖进底部垃圾箱 = 软删除（移进 trash/，从视图消失但文件里仍可找回）。
@@ -611,7 +623,7 @@ export default function App() {
     drag.current = null
     setDragging(false)
     setTrashOver(false)
-    if (!d) return
+    if (!d || d.source.kind === 'trash') return // 垃圾箱条目本身不再"扔进垃圾箱"
     try {
       await api.trashTodo(d.source, d.id)
     } catch {
@@ -1058,9 +1070,27 @@ export default function App() {
             {trash.length === 0 ? (
               <p className="muted empty">垃圾箱是空的。</p>
             ) : (
-              <ul className="todos">
+              <>
+                <p className="trash-hint">把某条拖到左上的日历某天、或左下的任务卡片，就恢复到那里。</p>
+                <ul className="todos">
                 {trash.map((t, i) => (
-                  <li key={t.id ?? i} className={`todo todo-${t.state}`}>
+                  <li
+                    key={t.id ?? i}
+                    className={`todo todo-${t.state}`}
+                    draggable={!!t.id}
+                    onDragStart={(e) => {
+                      if (!t.id) return
+                      e.dataTransfer.effectAllowed = 'move'
+                      drag.current = { index: i, id: t.id, source: { kind: 'trash', date: t.date } }
+                      // 不置 dragging：从垃圾箱拖出是"恢复"，不该弹出底部的删除垃圾箱
+                    }}
+                    onDragEnd={() => {
+                      drag.current = null
+                      setDragging(false)
+                      setTrashOver(false)
+                    }}
+                    title="拖到日历某天或任务卡片即可恢复"
+                  >
                     <span className={'box box-' + t.state} aria-hidden>
                       <span className="box-sym">
                         {t.state === 'done' ? <DoneCheck /> : t.state === 'doing' ? <DoingHalf /> : null}
@@ -1072,7 +1102,8 @@ export default function App() {
                     </span>
                   </li>
                 ))}
-              </ul>
+                </ul>
+              </>
             )}
           </div>
         ) : todos === null ? (
