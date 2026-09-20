@@ -1,7 +1,7 @@
 /* ============================================================
    the-boxes — 界面样式
 
-   规范来源：docs/style-guide.md v0.3.30（唯一事实源）
+   规范来源：docs/style-guide.md v0.3.31（唯一事实源）
    本文件必须服从该规范；数值不一致时以规范为准，且视为缺陷。
 
    沿用 obsidian-minimal 的四条设计方法（MIT License,
@@ -370,6 +370,10 @@ h1 {
 /* 垃圾箱入口（任务卡片下方）：图标缩到与卡片文字齐平，计数右对齐 */
 .sidebar-trash {
   margin-top: 8px;
+}
+/* 图标是 svg，baseline 对齐会和文字错位 → 这一行改垂直居中 */
+.trash-entry .task-top {
+  align-items: center;
 }
 .trash-entry .trash-icon {
   width: 16px;
