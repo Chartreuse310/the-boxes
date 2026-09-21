@@ -1121,13 +1121,19 @@ export default function App() {
             <p className="muted empty">
               这一天还没有 todo。
               <br />
-              在上方输入框回车即可添加（也可在 <code>{inboxFile}</code> 里直接写）。
+              <br />
+              在上方输入框回车即可添加；
+              <br />
+              也可在 <code>{inboxFile}</code> 里直接写。
             </p>
           ) : (
             <p className="muted empty">
               还没有任何 todo。
               <br />
-              在上方输入框回车即可添加（也可在 <code>{dataRoot}/inbox/日期.md</code> 里直接写）。
+              <br />
+              在上方输入框回车即可添加；
+              <br />
+              也可在 <code>{dataRoot}/inbox/日期.md</code> 里直接写。
             </p>
           )
         ) : view?.kind === 'all' ? (
