@@ -1122,7 +1122,7 @@ export default function App() {
               这一天还没有 todo。
               <br />
               <br />
-              在上方输入框回车即可添加；
+              在上方输入框回车即可添加。
               <br />
               也可在 <code>{inboxFile}</code> 里直接写。
             </p>
@@ -1131,7 +1131,7 @@ export default function App() {
               还没有任何 todo。
               <br />
               <br />
-              在上方输入框回车即可添加；
+              在上方输入框回车即可添加。
               <br />
               也可在 <code>{dataRoot}/inbox/日期.md</code> 里直接写。
             </p>
